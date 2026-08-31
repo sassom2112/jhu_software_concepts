@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Mike Sasso{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <!-- Navigation bar: pinned to the top-right of every page. The link for the
+       current page receives the `active` class so it renders highlighted. -->
+  <header class="site-header">
+    <nav class="navbar">
+      <a class="nav-link {% if active_page == 'home' %}active{% endif %}"
+         href="{{ url_for('pages.home') }}">Home</a>
+      <a class="nav-link {% if active_page == 'contact' %}active{% endif %}"
+         href="{{ url_for('pages.contact') }}">Contact</a>
+      <a class="nav-link {% if active_page == 'projects' %}active{% endif %}"
+         href="{{ url_for('pages.projects') }}">Projects</a>
+    </nav>
+  </header>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 Mike Sasso &middot; JHU EN.605.256 Modern Software Concepts in Python</p>
+  </footer>
+</body>
+</html>

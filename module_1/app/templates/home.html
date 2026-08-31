@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.name }}{% endblock %}
+
+{% block content %}
+<!-- Home layout: bio text on the LEFT, image on the RIGHT (per assignment). -->
+<section class="hero">
+  <div class="hero-text">
+    <h1>{{ profile.name }}</h1>
+    <p class="position">{{ profile.position }}</p>
+    <p class="bio">{{ profile.bio }}</p>
+  </div>
+  <div class="hero-image">
+    <img src="{{ url_for('static', filename=profile.photo) }}"
+         alt="Photo of {{ profile.name }}">
+  </div>
+</section>
+{% endblock %}
