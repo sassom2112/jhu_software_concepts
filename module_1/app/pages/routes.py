@@ -22,10 +22,10 @@ PROFILE = {
         "concepts in Python. This site will grow with every project I "
         "complete throughout the course."
     ),
-    "photo": "img/profile.svg",  # replace with your own photo -- see README.txt
-    "email": "sassom2112@gmail.com",
-    "linkedin_url": "https://www.linkedin.com/in/your-handle",
-    "linkedin_label": "linkedin.com/in/your-handle",
+    "photo": "img/profile.png",
+    "email": "msasso1@jh.edu",
+    "linkedin_url": "https://www.linkedin.com/in/michael-sasso-0x00/",
+    "linkedin_label": "https://www.linkedin.com/in/michael-sasso-0x00/",
 }
 
 # Projects shown on the Projects page. Add one dict per project.
