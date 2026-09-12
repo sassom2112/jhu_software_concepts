@@ -1162,3 +1162,172 @@ University of Texas MD Anderson Cancer Center
 Wesleyan University
 Wheaton College
 William Paterson University of New Jersey
+Cornell Tech
+MIT Sloan School of Management
+The Scripps Research Institute
+Yale
+UT Southwestern
+Princeton Theological Seminary
+Rush University
+Stanford
+Pacific University
+University of Maryland - University College
+CUNY John Jay College of Criminal Justice
+Purdue
+Weill Cornell Medicine
+Zurich Graduate School of Economics
+Cornell
+Northwestern College
+Rochester University
+UCLA Anderson
+International Max Planck Research Schools
+Michener Center for Writers
+Rice
+University of Texas Southwestern Medical Center
+HEC Paris Business School
+Institut D'Etudes Politiques de Paris (Sciences Po)
+SFI EPFL
+Tinbergen Institute
+Brown Rice University
+Columbia
+Drew University
+Duke
+Immaculata University
+Joint CMU-Pitt Ph.D. Program in Computational Biology
+Kellogg School of Management
+Marymount University
+Mayo Clinic College of Medicine and Science
+Medical College of Wisconsin
+NYU Grossman School of Medicine
+SUNY Buffalo State University
+Scripps Research
+State University of New York at Stony Brook
+UPenn
+University of Hawaii
+CUNY Baruch College
+Cornell University School of Industrial and Labor Relations
+Hot Piss University
+Indiana University School of Medicine
+Marywood University
+Mount Saint Mary's University
+School of Visual Arts
+Texas A
+U Mass Boston
+U Penn
+University of Dublin, Trinity College
+Wisconsin Madison
+Antioch University - Seattle
+Berlin Mathematical School
+Boston
+Carnegie
+Cornell Dyson School of Applied Economics and Management
+Dartmouth
+Haas School of Business
+Hertie School
+Hogwarts
+Indiana University/Purdue University at Indianapolis
+LIU Brooklyn
+Mayo Clinic
+Mount Saint Vincent University
+Okinawa Institute of Science and Technology
+Rheinische Friedrich-Wilhelms Universität Bonn
+Rikers Island Institute of Technology
+Rutgers
+Rutgers School of Health Professions
+Saint Xavier University
+State University of New York at Binghamton
+Touro University
+UNC Wilmington
+University of Buffalo
+University of Illinois Urbana
+University of Mount Saint Vincent
+University of Tennessee Health Science Center
+University of Toronto, Mississauga
+Universität Zürich
+West Coast University
+Zurich
+42 US
+Augustana College
+Baylor
+Berke
+Berkeley
+Bloomsburg University of Pennsylvania
+Boulder
+Chatham University
+Chestnut Hill College
+Chicago University
+Curtis Institute of Music
+Elmhurst University
+Faulkner University
+Francis Crick Institute
+George Mason
+Georgetown
+Georgetown College
+Georgia Institute of Cosmetology
+Guantanamo Bay University
+HEC Montreal
+Holy Family University
+Illinois School of Professional Psychology at National Louis University
+Iowa State
+Johns
+Karlsruher Institut Für Technologie
+Lehigh
+Long Island University
+MCPHS University
+MIT Department of Urban Studies and Planning
+MIT-Harvard
+Mar-a-Lago University
+Massachu
+Mayo Clinic Graduate School of Biomedical Sciences
+McCombs School of Business
+Molloy College
+New York University Tisch
+North Ca
+Northern Arizona
+Northern Michigan University
+Northwestern College-Chicago Campus
+Ohio State
+Ohio University Main
+Pardee RAND Graduate School
+Penn S
+Regis College
+Roberts Wesleyan University
+Rosalind Franklin University of Medicine & Science
+Rowan
+SFI Geneva
+SFI Lugano
+SFI Zurich
+San Diego State University/UC San Diego
+San Diego State University/Univeristy of California San Diego
+San Diego State University/University of California, San Diego
+Sarah Stamp
+Sonoma State University
+Spalding University
+Stanf
+Test
+Texas A&M
+Texas Tech
+The Chicago School at Washington DC
+Tribhuvan University
+Tufts
+UMass Lowell
+UT Dallas
+UW Madison
+UW-Madison
+Union Theological Seminary
+Univeristy of Toronto
+Universidad Carlos III de Madrid
+University of Chicago Booth
+University of Colorado
+University of Georgia, Athens
+University of Macau
+University of Northwestern
+University of Oulu
+University of Pennsylvania Graduate School of Education
+University of Pitt
+University of Washington - Seattle
+University of Washington, Seattle
+Université de Lausanne
+Van Andel Institute
+Wayne State College
+Weill Medical College of Cornell University

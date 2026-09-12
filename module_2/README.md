@@ -401,7 +401,26 @@ llama-cpp-python 0.2.90 built from source (gcc 15), 20 CPU cores, no GPU.
 
 ### 7.2 Run statistics
 
-TBD_LLM_STATS
+| | |
+| --- | --- |
+| Rows standardized | 30,500 (12,204 distinct `program` strings sent to the model) |
+| Wall time | 101 min in two batches (52 + 49 min), 10 worker processes x 2 threads, about 118 strings/min; the machine is memory-bandwidth bound, so more workers do not help |
+| Model answer length | 23 to 31 tokens (JSON only), prompt prefix reused from the llama.cpp KV cache |
+| Distinct university spellings | 1,786 in the raw data -> 1,240 after standardization |
+| Distinct program spellings | 3,110 -> 2,427 |
+| Rows whose `llm-generated-university` is a canonical name | 98.5% |
+| Rows whose `llm-generated-program` is a canonical name | 95.1% |
+| Rows changed by standardization | university differs from the raw text in 7,197 rows, program in 3,891 |
+| "Unknown" universities | 8 (the 8 rows with an empty program field) |
+| `llm_extend_applicant_data.json` | 36 MB, valid JSON, same 30,500 rows and keys as `applicant_data.json` plus the two `llm-generated-*` keys |
+
+Example of the merges the pipeline makes (raw `university` -> standardized):
+"Johns Hopkins Bloomberg School of Public Health" (61 rows), "John Hopkins
+University" (4), "Johns Hopkins" (2) and "johns hopkins" (1) all become
+"Johns Hopkins University" (291 rows already used that name). The most
+frequent names that still do not resolve are acronyms applicants used as the
+whole name ("INSEAD", "SUNY", "IDSS", "PIBBS", "MPH"), which is where the
+next round of alias additions would go.
 
 ### 7.3 Systematic edge cases and remaining imperfections
 
