@@ -18,7 +18,15 @@ module_2/
 ├── screenshot.jpg                  # evidence that robots.txt was checked before scraping
 ├── applicant_data.json             # >= 30,000 cleaned applicant records (output of clean.py)
 ├── llm_extend_applicant_data.json  # applicant_data.json + llm-generated-program / llm-generated-university
-├── llm_hosting/                    # instructor-provided local-LLM standardizer (app.py, canon lists, ...)
+├── llm_hosting/                    # instructor's local-LLM standardizer + student additions
+│   ├── app.py                      # instructor's Flask/llama.cpp standardizer (edited, see section 7)
+│   ├── canon_universities.txt      # canonical university names (extended, see section 7)
+│   ├── canon_programs.txt          # canonical program names (extended, see section 7)
+│   ├── run_parallel.py             # student: runs app.py on many cores, caches answers, merges output
+│   ├── extend_canon.py             # student: adds frequent unresolved names to the canon lists
+│   ├── requirements.txt, README.md, sample_data.json   # instructor's files, unchanged
+│   ├── models/                     # (git-ignored) TinyLlama GGUF downloaded on first run
+│   └── work/                       # (git-ignored) answers.jsonl cache, shards and worker logs
 └── data/
     ├── robots.txt                  # copy of https://www.thegradcafe.com/robots.txt saved by scrape.py
     ├── raw_entries.json.gz         # raw listing text + page JSON for every scraped entry (input to clean.py)
@@ -78,11 +86,23 @@ regenerate `applicant_data.json` without scraping again.
 
 ### 2.3 LLM standardization (applicant_data.json -> llm_extend_applicant_data.json)
 
+The standardizer has its own environment because `llama-cpp-python` compiles
+native code (about two minutes with gcc; the prebuilt "cpu" wheel is linked
+against musl libc and does not load on Ubuntu, so it is built from source):
+
 ```bash
 cd llm_hosting
-pip install -r requirements.txt
-python app.py --file ../applicant_data.json > ../llm_extend_applicant_data.json
+python3 -m venv .venv && source .venv/bin/activate
+pip install --no-binary llama-cpp-python -r requirements.txt
+python run_parallel.py --input ../applicant_data.json --output ../llm_extend_applicant_data.json --workers 10 --threads 2
 ```
+
+The first run downloads the TinyLlama GGUF (about 670 MB) into
+`llm_hosting/models/`. `run_parallel.py` is resumable: re-running it only
+sends strings that have no cached answer yet. The instructor's single-process
+command still works (`python app.py --file ../applicant_data.json --out out.jsonl`)
+but takes many hours for 30,000 rows. To grow the canonical lists from the
+data before a run: `python extend_canon.py --input ../applicant_data.json --min-count 2`.
 
 See section 7 for what was changed in `llm_hosting/` and what the output looks like.
 
@@ -322,7 +342,65 @@ TBD_RUN_STATS
 
 ## 7. LLM standardization (llm_hosting)
 
-TBD_LLM_SECTION
+`llm_extend_applicant_data.json` is `applicant_data.json` with two extra keys
+per record, `llm-generated-program` and `llm-generated-university`, produced
+by the instructor's `llm_hosting/app.py` (TinyLlama-1.1B-Chat, Q4_K_M, run
+locally through `llama-cpp-python`) from the combined `program` field. All
+original fields, including the raw listing text under `raw`, are untouched.
+
+**Environment used:** Python 3.11.13, Flask 3.1.3, huggingface_hub 1.31.0,
+llama-cpp-python 0.2.90 built from source (gcc 15), 20 CPU cores, no GPU.
+
+### 7.1 Changes to the instructor's files (all marked "Student edit" in app.py)
+
+| Where | Change | Why |
+| --- | --- | --- |
+| `app.py` `_load_llm` | removed the `local_dir_use_symlinks` / `force_filename` arguments of `hf_hub_download` | huggingface_hub 1.x removed them; the shipped code raised `TypeError` |
+| `app.py` `_load_llm` | `n_threads_batch=N_THREADS` | llama.cpp otherwise uses every core for prompt processing in each process, so parallel workers oversubscribed the machine (4 workers managed 10 rows/min) |
+| `app.py` `_smart_title` | replaces `str.title()` | `.title()` produced "Materials Science And Engineering" and "Mcgill"; connecting words stay lower-case and short acronyms are kept |
+| `app.py` `_prefer_source_spelling` | keeps the applicant's spelling when the model's answer is only a noisy copy of it | the 1.1B model rewrote unknown names ("University of Dhaka" -> "Dhaaka", "Jewish" -> "Jewiš", "Electrical" -> "Ellectrical"); real expansions such as "UBC" -> "University of British Columbia" are kept because they match the canon list |
+| `app.py` `_best_match` + `_distinctive` | a fuzzy match is accepted only if the distinctive words also agree | at the shipped cutoff difflib mapped "University of Dhaka" -> "University of Dallas", "University of Michigan" -> "University of Milan", "University of Maryland" -> "University of Mary", "Penn State University" -> "Kent State University"; spelling repairs like "San Jose State" -> "San José State" still pass |
+| `app.py` `_expand_site_abbreviation` | handles Grad Cafe's "Full Name (ABBR)" school names | "University of California (UCLA)" becomes "University of California, Los Angeles" (dropping the parenthetical would merge all UC campuses); "(EPFL)", "(MIT)", "(WashU/WUSTL)" are dropped so the full name can match |
+| `app.py` `COMMON_UNI_FIXES`, `COMMON_PROG_FIXES`, `ABBREV_UNI` | about 100 aliases, looked up case-insensitively | "JHU" / "Johns Hopkins" / "John Hopkins University" -> Johns Hopkins University; "UNC Chapel Hill", "Penn State", "UT Austin", "UC Berkeley"; sub-schools mapped to the parent university (Bloomberg School of Public Health, Harvard Kennedy School, NYU Stern, Teachers College); program fragments "Mech", "Bio", "ECE", "EECS", "MPP", "Master of Social Work" |
+| `canon_universities.txt` | TBD_CANON_U | added by `extend_canon.py`: names that occur at least twice and still did not resolve (mostly non-US universities, medical schools, art schools) |
+| `canon_programs.txt` | TBD_CANON_P | same, for programs (Creative Writing Fiction, School Psychology, Audiology, Astronomy and Astrophysics, ...) |
+| `run_parallel.py` (new) | shards the distinct `program` strings over N `app.py` processes, caches every answer in `work/answers.jsonl`, re-applies the post-processing at merge time | one process handles about 20 strings/min; 30,000 rows would take a day. Only TBD_DISTINCT distinct strings exist, and the model runs at temperature 0, so each string is standardized once |
+| `extend_canon.py` (new) | data-driven growth of the canonical lists | the instructor's loop "run, scan for outliers, extend the canon files, rerun" |
+
+### 7.2 Run statistics
+
+TBD_LLM_STATS
+
+### 7.3 Systematic edge cases and remaining imperfections
+
+- **The model invents spelling.** TinyLlama copies most names correctly but
+  "corrects" ones it does not know into near-misses. The source-spelling
+  guard removes the cases where the answer is close to the input; a wrong
+  answer that is *not* close to the input (rare) still gets through and then
+  either matches a canonical name or is kept as the model wrote it.
+- **Look-alike fuzzy merges.** The canonical list is US-centric, so foreign
+  universities used to be absorbed by similar US names. The distinctive-word
+  check stops that, at the price that a genuine variant whose distinctive
+  word is spelled very differently is no longer merged (it is then added to
+  the list by `extend_canon.py` if frequent, or left as written).
+- **Campus vs. university.** Applicants write "University of Michigan" and
+  "University of Michigan - Ann Arbor" for the same school; the alias map
+  merges the common ones onto the canonical flagship name, but ambiguous
+  bare names such as "University of California" or "Indiana University" are
+  left as written or mapped to the flagship, which is a judgment call.
+- **Schools inside universities.** "Harvard Kennedy School", "NYU Stern",
+  "Johns Hopkins Bloomberg School of Public Health" are mapped to the parent
+  university so statistics group per university; anyone who wants
+  school-level analysis still has the original text in `program` / `raw`.
+- **Programs are genuinely diverse.** Many "unresolved" programs are simply
+  real, distinct names (History of Consciousness, Sonic Practice); adding them
+  to the canon list makes the output stable but does not merge them with
+  anything, and near-synonyms (Politics vs Political Science, Speech
+  Pathology vs Speech-Language Pathology) are merged only where an alias was
+  added by hand.
+- **Empty or missing program text.** `program` is `null` only when the
+  listing shows no program name at all (never happened in this data); app.py
+  would answer "Unknown" for such rows.
 
 ## 8. Known bugs, limitations and edge cases
 
