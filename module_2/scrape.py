@@ -65,8 +65,9 @@ USER_AGENT = (
 
 DEFAULT_TARGET_ENTRIES = 30_000
 DEFAULT_DELAY_SECONDS = 2.0
-REQUEST_TIMEOUT_SECONDS = 30
-RETRY_WAIT_SECONDS = 30
+REQUEST_TIMEOUT_SECONDS = 45
+SERVER_ERROR_RETRY_WAIT_SECONDS = 30      # one retry after a 5xx response
+NETWORK_RETRY_WAITS_SECONDS = (30, 120)   # two retries after timeouts / connection errors
 SAVE_JSON_EVERY_N_PAGES = 25
 
 # Strings that only appear on a Cloudflare interstitial, never on a real page.
@@ -85,9 +86,13 @@ logger = logging.getLogger("gradcafe.scrape")
 class ScrapeBlockedError(RuntimeError):
     """Raised when the site blocks, rate-limits, or otherwise rejects a request."""
 
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
 
 class ScrapeNetworkError(RuntimeError):
-    """Raised when the network fails twice in a row (the run stops; resume later)."""
+    """Raised when the network keeps failing (the run stops; resume later)."""
 
 
 # --------------------------------------------------------------------------- #
@@ -239,29 +244,38 @@ class GradCafeScraper:
                 body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as err:
             if err.code in (401, 403, 429) or err.code >= 500:
-                raise ScrapeBlockedError(f"HTTP {err.code} {err.reason} for {url}") from err
+                raise ScrapeBlockedError(f"HTTP {err.code} {err.reason} for {url}", status=err.code) from err
             raise
         if self._looks_like_challenge(body):
             raise ScrapeBlockedError(f"Cloudflare challenge page returned for {url}")
         return body
 
     def _fetch_page(self, url: str) -> str:
-        """GET with one polite retry for transient network errors only."""
-        try:
-            return self._http_get(url)
-        except ScrapeBlockedError as err:
-            if "HTTP 5" in str(err):  # transient server error: one retry
-                logger.warning("%s; waiting %ss then retrying once", err, RETRY_WAIT_SECONDS)
-                time.sleep(RETRY_WAIT_SECONDS)
-                return self._http_get(url)
-            raise  # 401/403/429/challenge: stop immediately, never retry
-        except (urllib.error.URLError, TimeoutError, OSError) as err:
-            logger.warning("Network error %s; waiting %ss then retrying once", err, RETRY_WAIT_SECONDS)
-            time.sleep(RETRY_WAIT_SECONDS)
+        """GET with a small, slow retry budget for transient failures only.
+
+        * 401 / 403 / 429 or a challenge page: stop at once, never retry.
+        * 5xx: wait 30 s and retry once.
+        * timeout / connection error: wait 30 s, retry; wait 120 s, retry;
+          then give up with ScrapeNetworkError.
+        """
+        server_error_retried = False
+        network_failures = 0
+        while True:
             try:
                 return self._http_get(url)
-            except (urllib.error.URLError, TimeoutError, OSError) as second_err:
-                raise ScrapeNetworkError(f"network failed twice for {url}: {second_err}") from second_err
+            except ScrapeBlockedError as err:
+                if err.status is None or err.status < 500 or server_error_retried:
+                    raise
+                server_error_retried = True
+                wait_seconds = SERVER_ERROR_RETRY_WAIT_SECONDS
+                logger.warning("%s; waiting %ss then retrying once", err, wait_seconds)
+            except (urllib.error.URLError, TimeoutError, OSError) as err:
+                if network_failures >= len(NETWORK_RETRY_WAITS_SECONDS):
+                    raise ScrapeNetworkError(f"network failed {network_failures + 1} times for {url}: {err}") from err
+                wait_seconds = NETWORK_RETRY_WAITS_SECONDS[network_failures]
+                network_failures += 1
+                logger.warning("Network error %s; waiting %ss then retrying", err, wait_seconds)
+            time.sleep(wait_seconds)
 
     @staticmethod
     def _looks_like_challenge(body: str) -> bool:

@@ -119,13 +119,14 @@ entirely; this scraper is none of them and identifies itself honestly as
 models, which this coursework does not do.
 
 **Politeness.** One request at a time, a fixed 2-second sleep between page
-requests (about 0.3 requests per second), one polite retry only for transient
-network errors or 5xx responses, and an immediate, unconditional stop on
-HTTP 401 / 403 / 429 or a Cloudflare challenge page. Nothing is done to work
-around a block: the run ends (exit code 2; exit code 3 when the network itself
-fails twice in a row), progress is saved, and it can be resumed later. Only
-the public listing pages are fetched (no login-protected pages, no
-per-applicant detail pages).
+requests (about 0.3 requests per second), a small and slow retry budget for
+transient failures only (one retry after 30 s for a 5xx response; retries
+after 30 s and then 120 s for a timeout or connection error), and an
+immediate, unconditional stop on HTTP 401 / 403 / 429 or a Cloudflare
+challenge page. Nothing is done to work around a block: the run ends (exit
+code 2 when the site rejects a request, 3 when the network keeps failing),
+progress is saved, and it can be resumed later. Only the public listing pages
+are fetched (no login-protected pages, no per-applicant detail pages).
 
 ## 4. Scraping approach (scrape.py)
 
@@ -319,4 +320,41 @@ TBD_LLM_SECTION
 
 ## 8. Known bugs, limitations and edge cases
 
-TBD_KNOWN_ISSUES
+No known bugs in the delivered pipeline; the points below are the edge cases
+and limitations found while building and checking it.
+
+- **Decision-date year.** Only the page JSON carries the decision year. When it
+  is present (every page fetched so far) `decision_date` is exact. If a page
+  ever lacked the payload, the badge fallback would infer the year and mark the
+  record `decision_date_source = "badge_year_inferred"`; on the pages checked
+  that fallback disagrees with the site for about 1.4% of entries, so
+  downstream analysis should prefer records with `site_json`.
+- **Decisions without a date.** A badge that reads just "Other" (and, on the
+  old layout, a bare "Accepted") has no date: `status` is set and
+  `decision_date` is `null`.
+- **Cloudflare e-mail obfuscation.** When an applicant types an e-mail address
+  into a comment, the HTML shows it as `[email protected]` while the page JSON
+  holds the real address. `comments` uses the visible HTML text (so it does
+  not harvest addresses); the JSON copy is in `data/raw_entries.json.gz`.
+- **Nationality "Other".** Entries whose site record says `status = "Other"`
+  show no International/American badge; `us_or_international` is `null`.
+- **GPA scales.** GPA is kept exactly as reported. Most values are on a 4.0
+  scale but some applicants report other scales (or typos such as 0.1); no
+  re-scaling is attempted because the scale is not stated on the site.
+- **GRE badge meaning.** The badge labelled "GRE" is stored by the site as
+  `greq` and its values (139-170 in the data) are Quantitative section
+  scores, not the 260-340 total, so `gre` should be read as GRE Quantitative.
+- **Comments are single paragraphs.** The listing renders one `<p>` per
+  comment and no line breaks were observed; newlines are preserved anyway if
+  they ever appear.
+- **Site instability.** During the run Grad Cafe answered some requests with
+  read timeouts and HTTP 502. The scraper waits 30 s / 120 s and retries at
+  most twice for those, stops (keeping its checkpoint) if that is not enough,
+  and never retries a 401/403/429.
+- **Duplicates across runs.** Cursor pagination is stable, but entries are
+  still de-duplicated by result id when resuming and when re-parsing the
+  cache, so a page that is fetched twice cannot produce two records.
+- **Detail pages are not fetched.** Fields that exist only on
+  `/result/<id>` pages (notification method, institution statistics) are not
+  collected; the JSON in the listing already includes the decision date, so
+  the extra 30,000 requests were not justified.

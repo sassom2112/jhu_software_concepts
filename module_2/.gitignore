@@ -7,3 +7,4 @@ data/*.tmp
 data/*.log
 data/checkpoint.json
 data/raw_entries.json
+data/scrape.pid
