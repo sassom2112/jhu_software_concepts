@@ -198,7 +198,13 @@ def main(argv: list[str] | None = None) -> int:
 
     merged: list[dict] = []
     for row in rows:
-        program, university = answers[(row or {}).get("program") or ""]
+        text = (row or {}).get("program") or ""
+        program, university = answers[text]
+        # Same two steps app.py applies to a fresh model answer (both are safe
+        # to repeat), so later improvements to the guard, alias maps or canon
+        # lists reach the cached answers as well.
+        program = app._prefer_source_spelling(program, text, app.CANON_PROGS, 0.84, app._post_normalize_program)
+        university = app._prefer_source_spelling(university, text, app.CANON_UNIS, 0.86, app._post_normalize_university)
         extended = dict(row)
         extended[PROGRAM_KEY] = app._post_normalize_program(program)
         extended[UNIVERSITY_KEY] = app._post_normalize_university(university)

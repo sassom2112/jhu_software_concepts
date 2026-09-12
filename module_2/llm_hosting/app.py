@@ -185,6 +185,13 @@ COMMON_UNI_FIXES: Dict[str, str] = {
     "Virginia Polytechnic Institute and State University": "Virginia Tech",
     "University of Montreal": "Université de Montréal",
     "William & Mary": "College of William & Mary",
+    "New York University Steinhardt": "New York University",
+    "New York University Tandon School of Engineering": "New York University",
+    "WashU/WUSTL": "Washington University in St. Louis",
+    "WashU": "Washington University in St. Louis",
+    "WUSTL": "Washington University in St. Louis",
+    "Massachusetts Institute of Technology (MIT) - Woods Hole Oceanographic Institution": "Massachusetts Institute of Technology",
+    "Massachusetts Institute of Technology - Woods Hole Oceanographic Institution": "Massachusetts Institute of Technology",
 }
 _UNI_FIXES_CI: Dict[str, str] = {k.lower(): v for k, v in COMMON_UNI_FIXES.items()}
 
@@ -389,7 +396,7 @@ def _source_parts(program_text: str) -> List[str]:
     return candidates
 
 
-def _prefer_source_spelling(llm_value: str, program_text: str, canon: List[str], cutoff: float) -> str:
+def _prefer_source_spelling(llm_value: str, program_text: str, canon: List[str], cutoff: float, normalize=None) -> str:
     """Student edit: undo spelling noise introduced by the tiny model.
 
     TinyLlama sometimes rewrites names it does not know ("University of
@@ -400,18 +407,26 @@ def _prefer_source_spelling(llm_value: str, program_text: str, canon: List[str],
     1.1B-parameter model.  Genuine expansions ("UBC" -> "University of
     British Columbia") are kept because they match the canon list.
     """
+    def known(name: str) -> bool:
+        """In the canon list directly, through the alias maps, or by a safe fuzzy match."""
+        if name in canon or _best_match(name, canon, cutoff=cutoff):
+            return True
+        return bool(normalize) and normalize(name) in canon
+
     value = (llm_value or "").strip()
-    if not value or value in canon or _best_match(value, canon, cutoff=cutoff):
+    if not value or known(value):
         return value
     best, best_ratio = value, 0.0
     for candidate in _source_parts(program_text):
-        if candidate in canon or _best_match(candidate, canon, cutoff=cutoff):
+        if known(candidate):
             ratio = 1.0  # a known name in the input beats an unknown model answer
         else:
             ratio = difflib.SequenceMatcher(None, value.lower(), candidate.lower()).ratio()
         if ratio > best_ratio:
             best, best_ratio = candidate, ratio
-    if best_ratio >= 0.8 and best.lower() != value.lower():
+    # 0.7: when neither side is a known name, a moderately similar input part
+    # is still more trustworthy than the model's rewrite of it.
+    if best_ratio >= 0.7 and best.lower() != value.lower():
         return best
     return value
 
@@ -526,8 +541,8 @@ def _call_llm(program_text: str) -> Dict[str, str]:
         std_prog, std_uni = _split_fallback(program_text)
 
     # Student edit: keep the input's spelling when the model only added noise.
-    std_prog = _prefer_source_spelling(std_prog, program_text, CANON_PROGS, cutoff=0.84)
-    std_uni = _prefer_source_spelling(std_uni, program_text, CANON_UNIS, cutoff=0.86)
+    std_prog = _prefer_source_spelling(std_prog, program_text, CANON_PROGS, 0.84, _post_normalize_program)
+    std_uni = _prefer_source_spelling(std_uni, program_text, CANON_UNIS, 0.86, _post_normalize_university)
 
     std_prog = _post_normalize_program(std_prog)
     std_uni = _post_normalize_university(std_uni)

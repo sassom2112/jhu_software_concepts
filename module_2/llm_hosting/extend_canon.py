@@ -42,10 +42,13 @@ def _append_lines(path: Path, names: list[str]) -> None:
 
 
 def _looks_like_fragment(name: str) -> bool:
-    """Acronyms and truncated words ("UCSD", "Mech", "Bio") belong in app.py's alias maps, not the lists."""
-    words = name.split()
+    """Acronyms ("UCSD", "EECS") belong in app.py's alias maps, not the lists.
+
+    Short real names such as "Law" or "Art" are kept; truncated words ("Mech",
+    "Bio") are already resolved by the alias maps before this check runs.
+    """
     letters = "".join(c for c in name if c.isalpha())
-    return len(name) < 5 or (len(words) == 1 and (letters.isupper() or len(name) < 8))
+    return len(name) < 3 or (len(name.split()) == 1 and letters.isupper())
 
 
 def _unresolved(counter: collections.Counter, canon: set[str], normalize) -> list[tuple[str, int]]:
