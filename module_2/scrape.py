@@ -86,6 +86,10 @@ class ScrapeBlockedError(RuntimeError):
     """Raised when the site blocks, rate-limits, or otherwise rejects a request."""
 
 
+class ScrapeNetworkError(RuntimeError):
+    """Raised when the network fails twice in a row (the run stops; resume later)."""
+
+
 # --------------------------------------------------------------------------- #
 #       JSON helpers (module level so they can be imported from clean.py)     #
 # --------------------------------------------------------------------------- #
@@ -254,7 +258,10 @@ class GradCafeScraper:
         except (urllib.error.URLError, TimeoutError, OSError) as err:
             logger.warning("Network error %s; waiting %ss then retrying once", err, RETRY_WAIT_SECONDS)
             time.sleep(RETRY_WAIT_SECONDS)
-            return self._http_get(url)
+            try:
+                return self._http_get(url)
+            except (urllib.error.URLError, TimeoutError, OSError) as second_err:
+                raise ScrapeNetworkError(f"network failed twice for {url}: {second_err}") from second_err
 
     @staticmethod
     def _looks_like_challenge(body: str) -> bool:
@@ -579,9 +586,10 @@ class GradCafeScraper:
                 url = next_url
                 if url and len(self.entries) < self.target_entries:
                     time.sleep(self.delay_seconds)  # politeness delay between requests
-        except ScrapeBlockedError as err:
-            # Site said no: persist what we have and stop.  The checkpoint still
-            # points at the page that failed, so a later run resumes there.
+        except (ScrapeBlockedError, ScrapeNetworkError) as err:
+            # Site said no (or the network is down): persist what we have and
+            # stop.  The checkpoint still points at the page that failed, so a
+            # later run resumes there.
             logger.error("Stopping: %s", err)
             self._save_checkpoint(url, finished=False)
             raise
@@ -744,6 +752,10 @@ def main(argv: list[str] | None = None) -> int:
         entries = scraper.entries
         exit_code = 2
         logger.error("The site rejected a request. Nothing was retried; re-run later to resume.")
+    except ScrapeNetworkError:
+        entries = scraper.entries
+        exit_code = 3
+        logger.error("Network failure. Progress is saved; re-run later to resume.")
     except KeyboardInterrupt:
         entries = scraper.entries
         exit_code = 130
