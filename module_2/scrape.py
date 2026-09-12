@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import json
 import logging
 import re
@@ -47,7 +48,7 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 from bs4 import BeautifulSoup, Tag
 
 # --------------------------------------------------------------------------- #
-# Constants                                                                   #
+#                                Constants                                    #
 # --------------------------------------------------------------------------- #
 
 BASE_URL = "https://www.thegradcafe.com"
@@ -73,6 +74,11 @@ CHALLENGE_MARKERS = ("<title>Just a moment...</title>", "cf-chl-bypass", "challe
 
 RESULT_HREF_PATTERN = re.compile(r"^/result/(\d+)")
 
+# The listing is an Inertia.js page: <div id="app" data-page="{...}"> carries a
+# JSON copy of the 20 rendered entries (with full ISO decision dates).
+LISTING_JSON_ELEMENT_ID = "app"
+LISTING_JSON_ATTRIBUTE = "data-page"
+
 logger = logging.getLogger("gradcafe.scrape")
 
 
@@ -81,23 +87,31 @@ class ScrapeBlockedError(RuntimeError):
 
 
 # --------------------------------------------------------------------------- #
-# JSON helpers (module level so they can be imported from clean.py)
+#       JSON helpers (module level so they can be imported from clean.py)     #
 # --------------------------------------------------------------------------- #
 
 
 def save_data(entries: list[dict], path: str | Path) -> None:
-    """Write a list of entry dicts to *path* as pretty-printed UTF-8 JSON."""
+    """Write a list of entry dicts to *path* as pretty-printed UTF-8 JSON.
+
+    A path ending in ".gz" is written gzip-compressed (same JSON inside).  The
+    file is written to a temporary name first and then renamed, so a crash can
+    never leave a half-written JSON file behind.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    with temp_path.open("w", encoding="utf-8") as handle:
+    temp_path = path.with_name(path.name + ".tmp")
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(temp_path, "wt", encoding="utf-8") as handle:
         json.dump(entries, handle, indent=2, ensure_ascii=False)
-    temp_path.replace(path)  # atomic on POSIX; avoids a half-written file
+    temp_path.replace(path)
 
 
 def load_data(path: str | Path) -> list[dict]:
-    """Read a JSON list of entry dicts from *path*."""
-    with Path(path).open("r", encoding="utf-8") as handle:
+    """Read a JSON list of entry dicts from *path* (plain or ".gz")."""
+    path = Path(path)
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, list):
         raise ValueError(f"{path} does not contain a JSON list")
@@ -105,7 +119,7 @@ def load_data(path: str | Path) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# Scraper
+#                               Scraper                                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -140,7 +154,7 @@ class GradCafeScraper:
         self._parser = "lxml" if _lxml_available() else "html.parser"
 
     # ------------------------------------------------------------------ #
-    # robots.txt
+    #                           robots.txt                               #
     # ------------------------------------------------------------------ #
 
     def check_robots(self) -> bool:
@@ -202,7 +216,7 @@ class GradCafeScraper:
                 raise PermissionError(f"robots.txt disallows {url}")
 
     # ------------------------------------------------------------------ #
-    # HTTP
+    #                                HTTP                                #
     # ------------------------------------------------------------------ #
 
     def _http_get(self, url: str) -> str:
@@ -247,7 +261,7 @@ class GradCafeScraper:
         return any(marker in body for marker in CHALLENGE_MARKERS)
 
     # ------------------------------------------------------------------ #
-    # URL management (urllib.parse)
+    #                  URL management (urllib.parse)                     #
     # ------------------------------------------------------------------ #
 
     @staticmethod
@@ -285,7 +299,7 @@ class GradCafeScraper:
         return None
 
     # ------------------------------------------------------------------ #
-    # Parsing (BeautifulSoup)
+    #                      Parsing (BeautifulSoup)                       #
     # ------------------------------------------------------------------ #
 
     def _parse_page(self, html: str, page_url: str) -> tuple[list[dict], str | None]:
@@ -317,7 +331,38 @@ class GradCafeScraper:
         if current_main is not None:
             entries.append(self._parse_entry(current_main, current_extra, page_url))
 
+        # Attach the page's own JSON record for each entry (may be None).
+        json_by_id = self._extract_listing_json(soup)
+        for entry in entries:
+            entry["listing_json"] = json_by_id.get(entry["result_id"])
+        if json_by_id and set(json_by_id) != {entry["result_id"] for entry in entries}:
+            logger.warning("Listing JSON ids differ from the table rows on %s", page_url)
+
         return entries, self._next_page_url(soup, page_url)
+
+    @staticmethod
+    def _extract_listing_json(soup: BeautifulSoup) -> dict[int, dict]:
+        """Return the entry records embedded in the page's JSON payload, by id.
+
+        The visible badges show decision dates as month/day only; the embedded
+        payload has the full date ("date_of_notification"), so it is kept next
+        to the visible text for traceability.  HTML parsing remains the primary
+        path: a missing or malformed payload simply yields an empty mapping.
+        """
+        app_div = soup.find("div", id=LISTING_JSON_ELEMENT_ID)
+        payload = app_div.get(LISTING_JSON_ATTRIBUTE) if app_div else None
+        if not payload:
+            return {}
+        try:
+            records = json.loads(payload)["props"]["results"]["data"]
+        except (ValueError, KeyError, TypeError):
+            logger.warning("Listing JSON payload missing or malformed; using HTML only")
+            return {}
+        return {
+            record["id"]: record
+            for record in records
+            if isinstance(record, dict) and isinstance(record.get("id"), int)
+        }
 
     def _parse_entry(self, main_row: Tag, extra_rows: list[Tag], page_url: str) -> dict:
         """Extract the raw visible text of one applicant listing."""
@@ -368,12 +413,13 @@ class GradCafeScraper:
             "decision_text": decision_text or None,
             "tags_text": tags,
             "comment_text": "\n".join(comment_parts) if comment_parts else None,
+            "listing_json": None,  # filled in by _parse_page from the page payload
             "source_page_url": page_url,
             "scraped_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
 
     # ------------------------------------------------------------------ #
-    # Persistence / resume
+    #                         Persistence / resume                       #
     # ------------------------------------------------------------------ #
 
     def _load_checkpoint(self) -> dict | None:
@@ -457,7 +503,7 @@ class GradCafeScraper:
         self.pages_fetched = 0
 
     # ------------------------------------------------------------------ #
-    # Main loop
+    #                            Main loop                               #
     # ------------------------------------------------------------------ #
 
     def scrape_data(self, resume: bool = True) -> list[dict]:
@@ -554,7 +600,7 @@ class GradCafeScraper:
 
 
 # --------------------------------------------------------------------------- #
-# Helpers
+#                                  Helpers                                    #
 # --------------------------------------------------------------------------- #
 
 
@@ -638,7 +684,7 @@ def _configure_logging(log_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Command line
+#                                  Command line                               #
 # --------------------------------------------------------------------------- #
 
 
@@ -704,6 +750,11 @@ def main(argv: list[str] | None = None) -> int:
 
     save_data(entries, raw_output)
     logger.info("Saved %d raw entries to %s", len(entries), raw_output)
+    # The plain raw file is ~50 MB at 30k entries, so the copy kept in git is
+    # the gzip one; clean.py reads either.
+    gzip_output = raw_output.with_name(raw_output.name + ".gz")
+    save_data(entries, gzip_output)
+    logger.info("Saved gzip copy to %s", gzip_output)
 
     if not args.no_clean and entries:
         from clean import clean_data  # local import avoids a circular import at module load

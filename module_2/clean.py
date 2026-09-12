@@ -77,17 +77,45 @@ def clean_data(raw_entries: list[dict]) -> list[dict]:
 
 
 def _clean_entry(raw: dict) -> dict:
-    university = _clean_text(raw.get("school_text"))
-    program_name = _clean_text(raw.get("program_text"))
-    degree = _clean_text(raw.get("degree_text"))
-    date_added_text = _clean_text(raw.get("date_added_text"))
-    decision_text = _clean_text(raw.get("decision_text"))
-    comment = _clean_text(raw.get("comment_text"), keep_newlines=True)
+    """Build one structured record from a raw listing entry.
+
+    The visible listing text is the primary source.  The page's embedded JSON
+    record (``listing_json``, when the scraper captured it) supplies the full
+    decision date and fills any field the badges did not show.
+    """
+    listing = raw.get("listing_json") or {}
+
+    university = _clean_text(raw.get("school_text")) or _clean_text(listing.get("school"))
+    program_name = _clean_text(raw.get("program_text")) or _clean_text(listing.get("program"))
+    degree = _clean_text(raw.get("degree_text")) or _clean_text(listing.get("level"))
+    date_added_text = _clean_text(raw.get("date_added_text")) or _clean_text(listing.get("added_on_label"))
+    decision_text = _clean_text(raw.get("decision_text")) or _clean_text(listing.get("decision_label"))
+    comment = _clean_text(raw.get("comment_text"), keep_newlines=True) or _clean_text(
+        listing.get("notes"), keep_newlines=True
+    )
     tags = [t for t in (_clean_text(tag) for tag in raw.get("tags_text") or []) if t]
 
-    date_added = _parse_date_added(date_added_text)
-    status, decision_date = _parse_decision(decision_text, date_added)
+    date_added = _parse_date_added(date_added_text) or _parse_iso_date(listing.get("created_at"))
+    status, inferred_decision_date = _parse_decision(decision_text, date_added)
+    if status is None:
+        status = _normalize_status(_clean_text(listing.get("decision")))
+
+    # Exact decision date from the page payload beats the month/day badge.
+    exact_decision_date = _parse_iso_date(listing.get("date_of_notification"))
+    if exact_decision_date:
+        decision_date, decision_date_source = exact_decision_date, "site_json"
+    elif inferred_decision_date:
+        decision_date, decision_date_source = inferred_decision_date, "badge_year_inferred"
+    else:
+        decision_date, decision_date_source = None, None
+
     metrics = _classify_tags(tags)
+    term = metrics["term"] or _parse_term(_clean_text(listing.get("season")))
+    applicant_type = metrics["applicant_type"] or _parse_applicant_type(_clean_text(listing.get("status")))
+    gpa = _first_present(metrics["gpa"], _to_number_or_none(listing.get("ugpa")))
+    gre = _first_present(metrics["gre"], _to_number_or_none(listing.get("greq")))
+    gre_verbal = _first_present(metrics["gre_verbal"], _to_number_or_none(listing.get("grev")))
+    gre_aw = _first_present(metrics["gre_analytical_writing"], _to_number_or_none(listing.get("grew")))
 
     return {
         "result_id": raw.get("result_id"),
@@ -101,12 +129,13 @@ def _clean_entry(raw: dict) -> dict:
         "date_added": date_added,
         "status": status,
         "decision_date": decision_date,
-        "term": metrics["term"],
-        "applicant_type": metrics["applicant_type"],
-        "gpa": metrics["gpa"],
-        "gre": metrics["gre"],
-        "gre_verbal": metrics["gre_verbal"],
-        "gre_analytical_writing": metrics["gre_analytical_writing"],
+        "decision_date_source": decision_date_source,
+        "term": term,
+        "applicant_type": applicant_type,
+        "gpa": gpa,
+        "gre": gre,
+        "gre_verbal": gre_verbal,
+        "gre_analytical_writing": gre_aw,
         "comments": comment,
         "other_tags": metrics["other_tags"],
         "raw": {
@@ -117,6 +146,7 @@ def _clean_entry(raw: dict) -> dict:
             "decision": raw.get("decision_text"),
             "tags": list(raw.get("tags_text") or []),
             "comment": raw.get("comment_text"),
+            "date_of_notification": listing.get("date_of_notification"),
             "scraped_at": raw.get("scraped_at"),
         },
     }
@@ -144,6 +174,46 @@ def _clean_text(value: object, keep_newlines: bool = False) -> str | None:
 def _join_program(program_name: str | None, university: str | None) -> str | None:
     parts = [part for part in (program_name, university) if part]
     return ", ".join(parts) if parts else None
+
+
+def _first_present(*values: object) -> object:
+    """Return the first value that is not None (all None -> None)."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _parse_iso_date(value: object) -> str | None:
+    """'2026-07-10T00:00:00.000000Z' or '2026-07-10' -> '2026-07-10'."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value[:10]).isoformat()
+    except ValueError:
+        return None
+
+
+def _parse_term(text: str | None) -> str | None:
+    """'fall 2026' -> 'Fall 2026'; anything else -> None."""
+    if not text:
+        return None
+    match = TERM_PATTERN.match(text)
+    return f"{match.group(1).title()} {match.group(2)}" if match else None
+
+
+def _parse_applicant_type(text: str | None) -> str | None:
+    """'International' / 'American' (any case) -> canonical label; else None."""
+    if not text:
+        return None
+    return text.title() if APPLICANT_TYPE_PATTERN.match(text) else None
+
+
+def _to_number_or_none(value: object) -> int | float | None:
+    """Numeric conversion for JSON payload values that may be None or strings."""
+    if value is None or value == "":
+        return None
+    return _to_number(str(value).strip())
 
 
 def _parse_date_added(text: str | None) -> str | None:
@@ -234,10 +304,9 @@ def _classify_tags(tags: list[str]) -> dict:
     }
     for tag in tags:
         if TERM_PATTERN.match(tag):
-            match = TERM_PATTERN.match(tag)
-            result["term"] = f"{match.group(1).title()} {match.group(2)}"
+            result["term"] = _parse_term(tag)
         elif APPLICANT_TYPE_PATTERN.match(tag):
-            result["applicant_type"] = tag.title()
+            result["applicant_type"] = _parse_applicant_type(tag)
         elif GRE_AW_PATTERN.match(tag):
             result["gre_analytical_writing"] = _to_number(GRE_AW_PATTERN.match(tag).group(1))
         elif GRE_V_PATTERN.match(tag):
@@ -258,11 +327,17 @@ def _classify_tags(tags: list[str]) -> dict:
 # --------------------------------------------------------------------------- #
 
 
+def _default_raw_input(script_dir: Path) -> Path:
+    """data/raw_entries.json if present, else the gzip copy that is kept in git."""
+    plain = script_dir / "data" / "raw_entries.json"
+    return plain if plain.exists() else plain.with_name(plain.name + ".gz")
+
+
 def main(argv: list[str] | None = None) -> int:
     script_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Clean raw Grad Cafe entries into applicant_data.json")
-    parser.add_argument("--input", default=str(script_dir / "data" / "raw_entries.json"),
-                        help="raw entries JSON produced by scrape.py")
+    parser.add_argument("--input", default=str(_default_raw_input(script_dir)),
+                        help="raw entries JSON (or .json.gz) produced by scrape.py")
     parser.add_argument("--output", default=str(script_dir / "applicant_data.json"),
                         help="destination for the cleaned JSON")
     args = parser.parse_args(argv)

@@ -6,3 +6,4 @@ data/*.jsonl
 data/*.tmp
 data/*.log
 data/checkpoint.json
+data/raw_entries.json
