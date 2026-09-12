@@ -1059,3 +1059,106 @@ Fairmont State University
 West Liberty University
 Wheeling University
 Concord University
+Ecole Polytechnique Federale de Lausanne
+University of Western Ontario
+Pratt Institute
+Central European University
+Medical University of South Carolina
+MGH Institute of Health Professions
+Toulouse School of Economics
+University of Tennessee
+Bocconi University
+School of the Art Institute of Chicago
+City University of New York
+Ithaca College
+Rhode Island School of Design
+The Wright Institute
+Universitat Pompeu Fabra
+University of Colorado Denver/Anschutz Medical Campus
+Hamad Bin Khalifa University
+Institute of Science and Technology Austria
+Parsons the New School for Design
+Perimeter Institute for Theoretical Physics
+Toyota Technological Institute at Chicago
+Brooklyn College
+CSU East Bay
+Icahn School of Medicine at Mount Sinai
+Miami University
+Palo Alto University
+Center for Monetary and Financial Studies
+Courtauld Institute of Art
+European University Institute
+Geneva Graduate Institute
+University of California
+University of Michigan - Dearborn
+Williams College
+Bard College
+Baylor College of Medicine
+Bennington College
+Bryn Mawr College
+Institut Polytechnique de Paris
+London Business School
+Louisiana State University Health Sciences Center
+Queens College
+SOAS University of London
+Sarah Lawrence College
+Stockholm School of Economics
+Texas Tech University Health Sciences Center
+University of Arkansas - Fayetteville
+Baldwin Wallace University
+Baruch College
+Bonn Graduate School of Economics
+Colorado School of Public Health
+Erasmus Mundus Scholarship
+La Salle University
+Lehman College
+Oxford Internet Institute
+PSL Research University
+Paris School of Economics
+Rockefeller University
+Saint Mary's College
+University of British Columbia Okanagan
+Wageningen University
+West Chester University of Pennsylvania
+William James College
+Adler University
+Albert Einstein College of Medicine
+Barcelona School of Economics
+Bard Graduate Center
+California Institute of the Arts
+Capital University
+College of Staten Island
+Cranbrook Academy of Art
+Erasmus Mundus Joint Master
+Ferdowsi University of Mashhad
+Georg-August Universität Göttingen
+Hollins University
+Humboldt State University
+Indiana University Indianapolis
+Indiana University at South Bend
+Isfahan University of Technology
+Islamic Azad University, Fars Science & Research Branch
+Johnson & Wales University
+King Fahad University of Petroleum and Minerals
+Macau University of Science and Technology
+Manhattanville College
+Minnesota State University
+New School for Social Research
+Ontario College of Art and Design
+Ontario Tech University
+PAU-Stanford
+Southern California Institute of Architecture
+The Juilliard School
+Tulane University of Louisiana
+UT Health San Antonio
+Uniformed Services University of the Health Sciences
+University of Findlay
+University of Luxembourg
+University of Massachusetts Chan Medical School
+University of Minnesota - Duluth
+University of Nebraska Medical Center
+University of St. Augustine for Health Sciences
+University of Texas MD Anderson Cancer Center
+Wesleyan University
+Wheaton College
+William Paterson University of New Jersey
