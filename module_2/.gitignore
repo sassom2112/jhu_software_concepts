@@ -8,3 +8,7 @@ data/*.log
 data/checkpoint.json
 data/raw_entries.json
 data/scrape.pid
+llm_hosting/.venv/
+llm_hosting/models/
+llm_hosting/work*/
+llm_hosting/__pycache__/
