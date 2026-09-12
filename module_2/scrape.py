@@ -60,8 +60,6 @@ BASE_URL = "https://www.thegradcafe.com"
 SURVEY_PATH = "/survey/"
 ROBOTS_PATH = "/robots.txt"
 ALLOWED_HOST = "www.thegradcafe.com"
-# The only parts of the site this scraper ever needs; everything else is refused.
-ALLOWED_PATH_PREFIXES = ("/survey", "/robots.txt", "/result/")
 
 # Honest, descriptive user agent.  Grad Cafe (via Cloudflare) answers 403 to
 # Python's default "Python-urllib/3.x" agent but serves this one normally.
@@ -79,8 +77,10 @@ NETWORK_RETRY_WAITS_SECONDS = (30, 120)   # two retries after timeouts / connect
 SAVE_JSON_EVERY_N_PAGES = 25
 MAX_STALE_PAGES = 3                       # consecutive pages with no new entry -> stop
 
-# Strings that only appear on a Cloudflare interstitial, never on a real page.
+# Strings that only appear on a Cloudflare interstitial, never on a real page,
+# and the response header Cloudflare sets on any challenged or blocked reply.
 CHALLENGE_MARKERS = ("<title>Just a moment...</title>", "cf-chl-bypass", "challenge-error-text")
+CLOUDFLARE_MITIGATION_HEADER = "cf-mitigated"
 
 RESULT_HREF_PATTERN = re.compile(r"^/result/(\d+)")
 CONTINUATION_ROW_CLASS = "tw-border-none"  # tag row / comment row under a main row
@@ -206,6 +206,11 @@ class GradCafeScraper:
                 robots_text = ""
             else:
                 raise
+        if not _looks_like_robots_file(robots_text):
+            # An HTML interstitial (or anything else) in place of robots.txt
+            # means the site's rules cannot be confirmed, so nothing is fetched.
+            logger.error("robots.txt could not be read as a robots file; stopping without scraping")
+            return False
         self._robots.parse(robots_text.splitlines())
         self._robots_text = robots_text
         self._robots_checked = True
@@ -272,7 +277,13 @@ class GradCafeScraper:
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
                 body = response.read().decode("utf-8", errors="replace")
+                mitigated = response.headers.get(CLOUDFLARE_MITIGATION_HEADER)
         except urllib.error.HTTPError as err:
+            if err.headers.get(CLOUDFLARE_MITIGATION_HEADER):
+                raise ScrapeBlockedError(
+                    f"HTTP {err.code} with Cloudflare mitigation '{err.headers.get(CLOUDFLARE_MITIGATION_HEADER)}' for {url}",
+                    status=err.code,
+                ) from err
             if err.code in (401, 403, 429) or err.code >= 500:
                 # Cloudflare serves its challenge page with HTTP 503: that is a
                 # block (never retried), not a transient server error.
@@ -284,6 +295,10 @@ class GradCafeScraper:
                 message = f"HTTP {err.code} {err.reason} for {url}" + (" (challenge page)" if challenged else "")
                 raise ScrapeBlockedError(message, status=err.code, retryable=err.code >= 500 and not challenged) from err
             raise
+        if mitigated:
+            # Cloudflare labels every mitigated (challenged / blocked) response,
+            # even a 200 with substitute content: treat it as a block, never retry.
+            raise ScrapeBlockedError(f"Cloudflare mitigation '{mitigated}' applied to {url}")
         if self._looks_like_challenge(body):
             raise ScrapeBlockedError(f"Cloudflare challenge page returned for {url}")
         return body
@@ -648,7 +663,7 @@ class GradCafeScraper:
         if url is None:
             return self.entries
         if not self.check_robots():
-            raise PermissionError("robots.txt does not allow scraping the survey pages")
+            raise PermissionError("robots.txt does not allow (or could not confirm) scraping the survey pages")
 
         pages_this_run = 0
         stale_pages = 0
@@ -725,37 +740,78 @@ class GradCafeScraper:
 # --------------------------------------------------------------------------- #
 
 
+CURSOR_TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+
+
+def _safe_cursor(cursor: str) -> str:
+    """Decode a pagination cursor, validate its three fields, and re-encode it.
+
+    Grad Cafe's cursor is URL-safe base64 of {"created_at": "<timestamp>",
+    "admitid": <int>, "_pointsToNextItems": <bool>}.  Only those typed values
+    are carried over, so a damaged checkpoint or an odd link cannot smuggle
+    anything else into the query string.  A valid cursor re-encodes to the
+    identical string.
+    """
+    padded = cursor + "=" * (-len(cursor) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(padded))
+    stamp = datetime.strptime(str(payload["created_at"]), "%Y-%m-%d %H:%M:%S")
+    created_at = (f"{stamp.year:04d}-{stamp.month:02d}-{stamp.day:02d} "
+                  f"{stamp.hour:02d}:{stamp.minute:02d}:{stamp.second:02d}")
+    admit_id = int(payload["admitid"])
+    points_to_next = bool(payload.get("_pointsToNextItems", True))
+    rebuilt = json.dumps(
+        {"created_at": created_at, "admitid": admit_id, "_pointsToNextItems": points_to_next},
+        separators=(",", ":"),
+    )
+    return base64.urlsafe_b64encode(rebuilt.encode("ascii")).decode("ascii").rstrip("=")
+
+
 def _safe_site_url(url: str) -> str:
     """Rebuild *url* from validated parts, or raise ValueError.
 
-    The scheme and host are always taken from BASE_URL (never from the input)
-    and only the listing, robots.txt and result paths are permitted, so a link
-    found on a page can never send the scraper to another server or to another
-    part of the site.
+    The scheme and host are always taken from BASE_URL (never from the input),
+    only the listing, robots.txt and result paths are permitted, and the query
+    string is rebuilt from a validated page number and cursor, so a link found
+    on a page (or a damaged checkpoint) can never send the scraper to another
+    server, another part of the site, or an arbitrary query.
     """
     parsed = urlparse(url)
     if parsed.netloc.lower() != ALLOWED_HOST:
         raise ValueError(f"refusing off-site URL {url}")
-    if not parsed.path.startswith(ALLOWED_PATH_PREFIXES):
+    # The path is re-created from a fixed table, never copied from the input.
+    result_match = RESULT_HREF_PATTERN.match(parsed.path)
+    if parsed.path == ROBOTS_PATH:
+        path = ROBOTS_PATH
+    elif parsed.path.rstrip("/") == SURVEY_PATH.rstrip("/"):
+        path = SURVEY_PATH.rstrip("/")
+    elif result_match:
+        path = f"/result/{int(result_match.group(1))}"
+    else:
         raise ValueError(f"refusing a path outside the public listing: {url}")
+    query = parse_qs(parsed.query)
+    clean_query: dict[str, object] = {}
+    try:
+        if "page" in query:
+            clean_query["page"] = int(query["page"][0])
+        if "cursor" in query:
+            clean_query["cursor"] = _safe_cursor(query["cursor"][0])
+    except (ValueError, KeyError, TypeError) as err:
+        raise ValueError(f"refusing a URL with an invalid query: {url}") from err
     base = urlparse(BASE_URL)
-    return urlunparse((base.scheme, base.netloc, parsed.path, "", parsed.query, ""))
+    return urlunparse((base.scheme, base.netloc, path, "", urlencode(clean_query), ""))
 
 
-def _confine_path(path: str | Path, roots: tuple[Path, ...]) -> Path:
-    """Resolve *path* and require it to lie inside one of *roots*.
+def _local_name(value: str | Path) -> str:
+    """Reduce a command-line path to a bare file or folder name.
 
-    Data and output locations come from command-line options; refusing
-    anything outside the module folder or the current working directory keeps
-    a mistyped option (or a "../" in it) from touching files elsewhere.
+    Everything this tool reads or writes lives inside the module_2 folder, so
+    only the last path component of an option is used: "../../etc" collapses
+    to "etc" and still lands inside the module.  Empty names are refused.
     """
-    resolved = os.path.realpath(str(path))
-    for root in roots:
-        real_root = os.path.realpath(str(root))
-        if resolved == real_root or resolved.startswith(real_root + os.sep):
-            return Path(resolved)
-    allowed = ", ".join(str(root) for root in roots)
-    raise ValueError(f"{path} is outside the allowed folders ({allowed})")
+    name = os.path.basename(os.path.normpath(str(value)))
+    if not name or name in (".", ".."):
+        raise ValueError(f"not a usable file or folder name: {value!r}")
+    return name
 
 
 def _utc_now() -> str:
@@ -825,6 +881,14 @@ def _robots_allows(robots_text: str, agent_token: str, url: str) -> bool:
     return best_allow
 
 
+def _looks_like_robots_file(text: str) -> bool:
+    """True for an empty file or one with robots directives; False for HTML or other content."""
+    lowered = text.lower()
+    if "<html" in lowered or "<!doctype" in lowered:
+        return False
+    return not text.strip() or "user-agent" in lowered
+
+
 def _lxml_available() -> bool:
     """True when the faster lxml parser is installed (html.parser otherwise)."""
     try:
@@ -859,11 +923,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-pages", type=int, default=None,
                         help="fetch at most this many pages in this run (useful for testing)")
     parser.add_argument("--data-dir", default="data",
-                        help="directory for raw JSONL, checkpoint, HTML cache and log")
+                        help="folder name inside module_2 for raw JSONL, checkpoint, HTML cache and log (default data)")
     parser.add_argument("--raw-output", default=None,
-                        help="raw entries JSON path (default <data-dir>/raw_entries.json)")
+                        help="raw entries JSON file name inside the data folder (default raw_entries.json)")
     parser.add_argument("--output", default="applicant_data.json",
-                        help="cleaned JSON written after scraping (default applicant_data.json)")
+                        help="cleaned JSON file name inside module_2 (default applicant_data.json)")
     parser.add_argument("--fresh", action="store_true",
                         help="discard checkpoint, progress log and cached pages, and start from the first page")
     parser.add_argument("--no-clean", action="store_true",
@@ -884,17 +948,11 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = _parse_args(argv)
     script_dir = Path(__file__).resolve().parent
-    allowed_roots = (script_dir, Path.cwd())
-    data_dir = Path(args.data_dir)
-    if not data_dir.is_absolute():
-        data_dir = script_dir / data_dir
-    output = Path(args.output)
-    if not output.is_absolute():
-        output = script_dir / output
+    # Command-line options name files and folders inside module_2 (see _local_name).
     try:
-        data_dir = _confine_path(data_dir, allowed_roots)
-        raw_output = _confine_path(args.raw_output or data_dir / "raw_entries.json", allowed_roots)
-        output = _confine_path(output, allowed_roots)
+        data_dir = script_dir / _local_name(args.data_dir)
+        raw_output = data_dir / _local_name(args.raw_output or "raw_entries.json")
+        output = script_dir / _local_name(args.output)
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1
@@ -918,6 +976,10 @@ def main(argv: list[str] | None = None) -> int:
         entries = scraper.entries
         exit_code = 2
         logger.error("The site rejected a request. Nothing was retried; re-run later to resume.")
+    except PermissionError as err:
+        entries = scraper.entries
+        exit_code = 2
+        logger.error("%s; nothing was fetched", err)
     except ScrapeNetworkError:
         entries = scraper.entries
         exit_code = 3

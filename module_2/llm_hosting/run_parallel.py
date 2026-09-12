@@ -22,9 +22,9 @@ far too slow for 30,000 rows.  This wrapper:
      `llm-generated-program` and `llm-generated-university`, exactly what a
      plain `app.py --file` run adds) and writes one JSON array to --output.
 
-Usage (from module_2/llm_hosting):
-    python run_parallel.py --input ../applicant_data.json \
-        --output ../llm_extend_applicant_data.json --workers 10 --threads 2
+Usage (from module_2/llm_hosting; --input/--output are file names inside module_2):
+    python run_parallel.py --input applicant_data.json \
+        --output llm_extend_applicant_data.json --workers 10 --threads 2
 """
 
 from __future__ import annotations
@@ -43,14 +43,17 @@ PROGRAM_KEY, UNIVERSITY_KEY = "llm-generated-program", "llm-generated-university
 PROGRESS_EVERY_SECONDS = 60
 
 
-def _confine_path(path: str, roots: tuple[Path, ...]) -> Path:
-    """Resolve *path* and require it to lie inside one of *roots* (module_2 or the current folder)."""
-    resolved = os.path.realpath(str(path))
-    for root in roots:
-        real_root = os.path.realpath(str(root))
-        if resolved == real_root or resolved.startswith(real_root + os.sep):
-            return Path(resolved)
-    raise ValueError(f"{path} is outside the allowed folders ({', '.join(str(r) for r in roots)})")
+def _local_name(value: str | Path) -> str:
+    """Reduce a command-line path to a bare file or folder name.
+
+    Everything this tool reads or writes lives inside the module_2 folder, so
+    only the last path component of an option is used: "../../etc" collapses
+    to "etc" and still lands inside the module.  Empty names are refused.
+    """
+    name = os.path.basename(os.path.normpath(str(value)))
+    if not name or name in (".", ".."):
+        raise ValueError(f"not a usable file or folder name: {value!r}")
+    return name
 
 
 def _read_rows(path: Path) -> list[dict]:
@@ -164,21 +167,24 @@ def _run_workers(python: str, pending: list[str], work_dir: Path, workers: int, 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Parallel driver for app.py")
-    parser.add_argument("--input", required=True, help="cleaned JSON array, e.g. ../applicant_data.json")
-    parser.add_argument("--output", required=True, help="merged JSON array to write")
+    parser.add_argument("--input", default="applicant_data.json",
+                        help="cleaned JSON file name inside module_2 (default applicant_data.json)")
+    parser.add_argument("--output", default="llm_extend_applicant_data.json",
+                        help="merged JSON file name inside module_2 (default llm_extend_applicant_data.json)")
     parser.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     parser.add_argument("--threads", type=int, default=2, help="CPU threads per worker (N_THREADS)")
-    parser.add_argument("--work-dir", default=str(HERE / "work"), help="where answers.jsonl and shards live")
+    parser.add_argument("--work-dir", default="work",
+                        help="folder name inside llm_hosting for answers.jsonl and shards (default work)")
     parser.add_argument("--limit", type=int, default=None, help="only process the first N rows (testing)")
     parser.add_argument("--no-merge", action="store_true", help="only standardize; do not write --output")
     args = parser.parse_args(argv)
 
     python = sys.executable
-    allowed_roots = (HERE.parent, Path.cwd())  # module_2 or the current folder
+    # Options name files inside module_2 and a folder inside llm_hosting.
     try:
-        work_dir = _confine_path(args.work_dir, allowed_roots)
-        input_path = _confine_path(args.input, allowed_roots)
-        output_path = _confine_path(args.output, allowed_roots)
+        work_dir = HERE / _local_name(args.work_dir)
+        input_path = HERE.parent / _local_name(args.input)
+        output_path = HERE.parent / _local_name(args.output)
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1

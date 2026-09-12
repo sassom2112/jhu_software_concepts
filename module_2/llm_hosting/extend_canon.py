@@ -15,7 +15,7 @@ from mapping it onto a look-alike ("University of Michigan" -> "University of
 Milan").
 
 Usage (from module_2/llm_hosting):
-    python extend_canon.py --input ../applicant_data.json --min-count 2
+    python extend_canon.py --input applicant_data.json --min-count 2
 """
 
 from __future__ import annotations
@@ -32,14 +32,17 @@ import app  # the instructor's module: canon lists, fix maps, post-normalizers
 HERE = Path(__file__).resolve().parent
 
 
-def _confine_path(path: str, roots: tuple[Path, ...]) -> Path:
-    """Resolve *path* and require it to lie inside one of *roots* (module_2 or the current folder)."""
-    resolved = os.path.realpath(str(path))
-    for root in roots:
-        real_root = os.path.realpath(str(root))
-        if resolved == real_root or resolved.startswith(real_root + os.sep):
-            return Path(resolved)
-    raise ValueError(f"{path} is outside the allowed folders ({', '.join(str(r) for r in roots)})")
+def _local_name(value: str | Path) -> str:
+    """Reduce a command-line path to a bare file or folder name.
+
+    Everything this tool reads or writes lives inside the module_2 folder, so
+    only the last path component of an option is used: "../../etc" collapses
+    to "etc" and still lands inside the module.  Empty names are refused.
+    """
+    name = os.path.basename(os.path.normpath(str(value)))
+    if not name or name in (".", ".."):
+        raise ValueError(f"not a usable file or folder name: {value!r}")
+    return name
 
 
 def _append_lines(path: Path, names: list[str]) -> None:
@@ -79,13 +82,14 @@ def _unresolved(counter: collections.Counter, canon: set[str], normalize) -> lis
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extend the canonical lists from the data")
-    parser.add_argument("--input", default=str(HERE.parent / "applicant_data.json"))
+    parser.add_argument("--input", default="applicant_data.json",
+                        help="cleaned JSON file name inside module_2 (default applicant_data.json)")
     parser.add_argument("--min-count", type=int, default=2, help="add a name only if it occurs this often")
     parser.add_argument("--dry-run", action="store_true", help="print the additions without writing")
     args = parser.parse_args(argv)
 
     try:
-        input_path = _confine_path(args.input, (HERE.parent, Path.cwd()))
+        input_path = HERE.parent / _local_name(args.input)  # a file name inside module_2
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1

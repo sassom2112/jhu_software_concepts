@@ -60,7 +60,9 @@ Useful options:
 | --- | --- |
 | `--target N` | stop after at least N entries (default 30000) |
 | `--delay S` | seconds to sleep between page requests (default 2.0) |
-| `--max-pages N` | fetch at most N pages in this run (handy for a quick test, e.g. `--max-pages 2 --target 40 --data-dir test_run --output test_run/out.json`) |
+| `--max-pages N` | fetch at most N pages in this run (handy for a quick test, e.g. `--max-pages 2 --target 40 --data-dir test_run --output test_out.json`) |
+| `--data-dir NAME` | folder name inside `module_2` for the checkpoint, JSONL, HTML cache and log (default `data`) |
+| `--output NAME` | cleaned JSON file name inside `module_2` (default `applicant_data.json`) |
 | `--fresh` | discard the checkpoint, progress log and cached pages, and start again from the newest page |
 | `--reparse-cache` | no network: rebuild the raw entries from `data/raw_html/` |
 | `--no-clean` | skip the cleaning step at the end |
@@ -77,8 +79,11 @@ its own, for example after editing `clean.py`:
 
 ```bash
 python clean.py                    # data/raw_entries.json (or .json.gz) -> applicant_data.json
-python clean.py --input data/raw_entries.json.gz --output applicant_data.json
+python clean.py --input raw_entries.json.gz --output applicant_data.json
 ```
+
+Options take bare file names: `--input` is looked up inside `data/`, `--output`
+is written inside `module_2` (see "Static analysis" in section 8 for why).
 
 `load_data()` / `save_data()` read and write either plain `.json` or `.json.gz`
 by file extension, so the committed `data/raw_entries.json.gz` is enough to
@@ -94,7 +99,7 @@ against musl libc and does not load on Ubuntu, so it is built from source):
 cd llm_hosting
 python3 -m venv .venv && source .venv/bin/activate
 pip install --no-binary llama-cpp-python -r requirements.txt
-python run_parallel.py --input ../applicant_data.json --output ../llm_extend_applicant_data.json --workers 10 --threads 2
+python run_parallel.py --input applicant_data.json --output llm_extend_applicant_data.json --workers 10 --threads 2
 ```
 
 The first run downloads the TinyLlama GGUF (about 670 MB) into
@@ -102,7 +107,8 @@ The first run downloads the TinyLlama GGUF (about 670 MB) into
 sends strings that have no cached answer yet. The instructor's single-process
 command still works (`python app.py --file ../applicant_data.json --out out.jsonl`)
 but takes many hours for 30,000 rows. To grow the canonical lists from the
-data before a run: `python extend_canon.py --input ../applicant_data.json --min-count 2`.
+data before a run: `python extend_canon.py --input applicant_data.json --min-count 2`
+(both scripts take bare file names inside `module_2`).
 
 See section 7 for what was changed in `llm_hosting/` and what the output looks like.
 
@@ -142,9 +148,9 @@ models, which this coursework does not do.
 requests (about 0.3 requests per second), a small and slow retry budget for
 transient failures only (one retry after 30 s for a 5xx response; retries
 after 30 s and then 120 s for a timeout or connection error), and an
-immediate, unconditional stop on HTTP 401 / 403 / 429, a Cloudflare
-challenge page (also when it arrives as a 503), or any other HTTP error such
-as 404. Nothing is done to work around a block: the run ends (exit code 2
+immediate, unconditional stop on HTTP 401 / 403 / 429, any reply carrying
+Cloudflare's `cf-mitigated` header, a challenge page (also when it arrives as
+a 503), or any other HTTP error such as 404. Nothing is done to work around a block: the run ends (exit code 2
 when the site rejects a request, 3 when the network keeps failing, 4 for an
 unexpected HTTP status, 5 when the local progress files are inconsistent),
 progress is saved, and it can be resumed later. Only the public listing pages
@@ -172,8 +178,8 @@ Everything lives in the class `GradCafeScraper`:
 | `_build_start_url()` | builds `https://www.thegradcafe.com/survey/?page=1` with `urlunparse`/`urlencode` |
 | `_next_page_url(soup, page_url)` | finds the "Next" anchor inside `<nav aria-label="Results pagination">`, resolves it with `urljoin`, and refuses off-site hosts |
 | `_describe_cursor(url)` | `parse_qs` + base64 to decode the pagination cursor for readable log lines |
-| `_safe_site_url(url)` / `_assert_allowed(url)` | URL rebuilt from the fixed host with an allow-list of paths, then the robots.txt check, before every request |
-| `_confine_path(path, roots)` | command-line paths must resolve inside `module_2` or the current directory |
+| `_safe_site_url(url)` / `_safe_cursor(cursor)` / `_assert_allowed(url)` | before every request the URL is re-composed from the fixed host, a fixed path table and a validated page number / cursor (typed fields only), then checked against robots.txt |
+| `_local_name(value)` | command-line options are reduced to bare file / folder names that live inside `module_2` |
 | `_http_get(url)` / `_fetch_page(url)` | the single GET, block detection, and the one-retry policy |
 | `_parse_page(html, page_url)` | groups table rows into entries and returns them plus the next URL |
 | `_parse_entry(main_row, extra_rows, page_url)` | pulls the visible text of one applicant row group |
@@ -349,7 +355,7 @@ Scrape performed on 2026-09-11 (local time), User-Agent
 | Date range of entries (`date_added`) | 2026-01-15 to 2026-09-11 |
 | Active fetching time | 103 min (about 4 s per page: 2 s server time + 2 s delay) |
 | Interruptions | two read timeouts at 21:00 and a site-wide HTTP 502 outage from 21:04 to 21:12; the run stopped cleanly each time and resumed from its checkpoint |
-| Requests refused (403/429) | none |
+| Requests refused (403/429) | none during the scrape (see section 8 for the challenge page served the next day) |
 | `applicant_data.json` | 33 MB, valid JSON (a list of 30,500 objects) |
 | `data/raw_entries.json.gz` | 2.7 MB (45.6 MB uncompressed) |
 
@@ -496,7 +502,17 @@ and limitations found while building and checking it.
   page) for about eight minutes. The scraper waits 30 s / 120 s and retries
   at most twice for such failures, stops while keeping its checkpoint if that
   is not enough, and never retries a 401/403/429; the run was resumed once
-  the site answered normally again.
+  the site answered normally again. The day after the scrape (2026-09-12),
+  a one-page test run received HTTP 403 with a Cloudflare challenge page for
+  the listing: the scraper logged it, stopped at once without retrying, and
+  no further requests were made. Cloudflare marks every challenged or
+  blocked reply with a `cf-mitigated` response header (even a 200 that
+  carries substitute content, as its shortened robots.txt did), so
+  `_http_get()` now treats that header as a block as well. That is the intended behaviour; anyone
+  re-running the scraper while the site challenges automated clients will
+  see the same stop (exit code 2). `check_robots()` also refuses to proceed
+  when the robots.txt response is not a robots file (for example an HTML
+  interstitial), because the site's rules cannot be confirmed.
 - **Applicant typos in names.** University and program names are free text
   on the site: "Harvar", "Banh Mi University" and joke entries exist. They
   are kept verbatim in `applicant_data.json` (the assignment forbids editing
@@ -509,15 +525,18 @@ and limitations found while building and checking it.
   `/result/<id>` pages (notification method, institution statistics) are not
   collected; the JSON in the listing already includes the decision date, so
   the extra 30,000 requests were not justified.
-- **Static analysis (Snyk Code).** Snyk flags "path traversal" wherever a
-  command-line option such as `--data-dir` or `--output` becomes a file path,
-  and "SSRF" for the `urlopen` call whose URL comes from the page's "Next"
-  link. Both flows are validated explicitly: `_safe_site_url()` rebuilds every
-  URL from the fixed `www.thegradcafe.com` host and accepts only the
-  `/survey`, `/robots.txt` and `/result/` paths (then robots.txt is checked
-  again), so a link found on a page can never send the scraper elsewhere;
-  and `_confine_path()` resolves every path given on the command line and
-  refuses anything outside the `module_2` folder or the current working
-  directory (the same rule is applied in `clean.py`, `run_parallel.py`,
-  `extend_canon.py` and the CLI of `app.py`). A test run therefore needs a
-  relative location such as `--data-dir test_run`, not `/tmp/...`.
+- **Static analysis (Snyk Code).** A first scan reported 22 findings: "path
+  traversal" wherever a command-line option became a file path, and "SSRF"
+  for the `urlopen` call whose URL comes from the page's "Next" link (and,
+  through the checkpoint file, from `--data-dir`). Neither was exploitable in
+  a local scraper, but both flows are now constructed so that no input reaches
+  a sink: `_safe_site_url()` re-composes every URL from the fixed
+  `www.thegradcafe.com` host, a fixed path table (`/survey`, `/robots.txt`,
+  `/result/<int>`) and a cursor whose three fields are decoded, type-checked
+  and re-encoded (a valid cursor re-encodes to the identical string; every one
+  of the 1,525 fetched URLs does), and command-line options in `scrape.py`,
+  `clean.py`, `run_parallel.py` and `extend_canon.py` are reduced to bare
+  file / folder names inside `module_2` by `_local_name()`. The final scan
+  reports 3 low notes, all in the instructor's `app.py` CLI (`--file` /
+  `--out`), where a path check was added but relative paths are still
+  accepted so the instructor's documented usage keeps working.

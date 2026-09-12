@@ -24,7 +24,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from scrape import _confine_path, load_data, save_data
+from scrape import _local_name, load_data, save_data
 
 # --------------------------------------------------------------------------- #
 #        Patterns for the badge ("tag") texts shown under each listing row    #
@@ -361,16 +361,15 @@ def main(argv: list[str] | None = None) -> int:
     """Read the raw entries, clean them, and write applicant_data.json."""
     script_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Clean raw Grad Cafe entries into applicant_data.json")
-    parser.add_argument("--input", default=str(_default_raw_input(script_dir)),
-                        help="raw entries JSON (or .json.gz) produced by scrape.py")
-    parser.add_argument("--output", default=str(script_dir / "applicant_data.json"),
-                        help="destination for the cleaned JSON")
+    parser.add_argument("--input", default=None,
+                        help="raw entries file name inside data/ (default raw_entries.json, or its .gz copy)")
+    parser.add_argument("--output", default="applicant_data.json",
+                        help="cleaned JSON file name inside module_2 (default applicant_data.json)")
     args = parser.parse_args(argv)
-    # Paths from the command line must stay inside module_2 or the current folder.
-    allowed_roots = (script_dir, Path.cwd())
+    # Options name files inside module_2 (bare names; see scrape._local_name).
     try:
-        input_path = _confine_path(args.input, allowed_roots)
-        output_path = _confine_path(args.output, allowed_roots)
+        input_path = script_dir / "data" / _local_name(args.input) if args.input else _default_raw_input(script_dir)
+        output_path = script_dir / _local_name(args.output)
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1
