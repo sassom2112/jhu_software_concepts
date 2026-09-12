@@ -338,7 +338,39 @@ Example cleaned record:
 
 ## 6. Run statistics
 
-TBD_RUN_STATS
+Scrape performed on 2026-09-11 (local time), User-Agent
+`JHU-EN605256-GradCafeScraper/1.0`, 2.0 s between page requests.
+
+| | |
+| --- | --- |
+| Listing pages fetched | 1,525 (20 entries each) |
+| Entries collected | 30,500, all unique (result ids 989778 to 1020481) |
+| Date range of entries (`date_added`) | 2026-01-15 to 2026-09-11 |
+| Active fetching time | 103 min (about 4 s per page: 2 s server time + 2 s delay) |
+| Interruptions | two read timeouts at 21:00 and a site-wide HTTP 502 outage from 21:04 to 21:12; the run stopped cleanly each time and resumed from its checkpoint |
+| Requests refused (403/429) | none |
+| `applicant_data.json` | 33 MB, valid JSON (a list of 30,500 objects) |
+| `data/raw_entries.json.gz` | 2.7 MB (45.6 MB uncompressed) |
+
+Field coverage in `applicant_data.json` (non-null values):
+
+| Field | Rows | Share |
+| --- | --- | --- |
+| `university`, `degree`, `date_added`, `status`, `decision_date`, `term`, `url` | 30,500 | 100% |
+| `program` / `program_name` | 30,492 | 100% (8 entries have an empty program on the site) |
+| `us_or_international` | 29,952 | 98.2% (15,943 American, 13,884 International, 125 Other) |
+| `gpa` | 18,422 | 60.4% |
+| `gre` | 2,426 | 8.0% |
+| `gre_v` | 2,036 | 6.7% |
+| `gre_aw` | 1,913 | 6.3% |
+| `comments` | 14,105 | 46.2% |
+
+`status`: 14,208 Rejected, 11,371 Accepted, 2,735 Waitlisted, 2,186 Interview.
+`degree`: 21,609 PhD, 7,700 Masters, 621 MFA, 313 PsyD, 213 Other, 18 JD, 17 EdD,
+9 MBA. `term`: 30,066 Fall 2026, 199 Spring 2026, 197 Fall 2025, 29 Spring
+2027, 9 Spring 2025. Every `decision_date` came from the page JSON
+(`decision_date_source = "site_json"`), and `other_tags` is empty for every
+row, i.e. every badge on every page was recognized.
 
 ## 7. LLM standardization (llm_hosting)
 
@@ -362,9 +394,9 @@ llama-cpp-python 0.2.90 built from source (gcc 15), 20 CPU cores, no GPU.
 | `app.py` `_best_match` + `_distinctive` | a fuzzy match is accepted only if the distinctive words also agree | at the shipped cutoff difflib mapped "University of Dhaka" -> "University of Dallas", "University of Michigan" -> "University of Milan", "University of Maryland" -> "University of Mary", "Penn State University" -> "Kent State University"; spelling repairs like "San Jose State" -> "San José State" still pass |
 | `app.py` `_expand_site_abbreviation` | handles Grad Cafe's "Full Name (ABBR)" school names | "University of California (UCLA)" becomes "University of California, Los Angeles" (dropping the parenthetical would merge all UC campuses); "(EPFL)", "(MIT)", "(WashU/WUSTL)" are dropped so the full name can match |
 | `app.py` `COMMON_UNI_FIXES`, `COMMON_PROG_FIXES`, `ABBREV_UNI` | about 100 aliases, looked up case-insensitively | "JHU" / "Johns Hopkins" / "John Hopkins University" -> Johns Hopkins University; "UNC Chapel Hill", "Penn State", "UT Austin", "UC Berkeley"; sub-schools mapped to the parent university (Bloomberg School of Public Health, Harvard Kennedy School, NYU Stern, Teachers College); program fragments "Mech", "Bio", "ECE", "EECS", "MPP", "Master of Social Work" |
-| `canon_universities.txt` | TBD_CANON_U | added by `extend_canon.py`: names that occur at least twice and still did not resolve (mostly non-US universities, medical schools, art schools) |
-| `canon_programs.txt` | TBD_CANON_P | same, for programs (Creative Writing Fiction, School Psychology, Audiology, Astronomy and Astrophysics, ...) |
-| `run_parallel.py` (new) | shards the distinct `program` strings over N `app.py` processes, caches every answer in `work/answers.jsonl`, re-applies the post-processing at merge time | one process handles about 20 strings/min; 30,000 rows would take a day. Only TBD_DISTINCT distinct strings exist, and the model runs at temperature 0, so each string is standardized once |
+| `canon_universities.txt` | 979 -> 1,251 names (+272) | added by `extend_canon.py`: names that occur at least twice and still did not resolve (mostly non-US universities, medical schools, art schools) |
+| `canon_programs.txt` | 289 -> 1,044 names (+755) | same, for programs (Creative Writing Fiction, School Psychology, Audiology, Astronomy and Astrophysics, ...) |
+| `run_parallel.py` (new) | shards the distinct `program` strings over N `app.py` processes, caches every answer in `work/answers.jsonl`, re-applies the post-processing at merge time | one process handles about 20 strings/min; 30,000 rows would take a day. Only 12,204 distinct strings exist among the 30,500 rows, and the model runs at temperature 0, so each string is standardized once |
 | `extend_canon.py` (new) | data-driven growth of the canonical lists | the instructor's loop "run, scan for outliers, extend the canon files, rerun" |
 
 ### 7.2 Run statistics
@@ -398,9 +430,10 @@ TBD_LLM_STATS
   anything, and near-synonyms (Politics vs Political Science, Speech
   Pathology vs Speech-Language Pathology) are merged only where an alias was
   added by hand.
-- **Empty or missing program text.** `program` is `null` only when the
-  listing shows no program name at all (never happened in this data); app.py
-  would answer "Unknown" for such rows.
+- **Empty program text.** 8 of the 30,500 entries have an empty program
+  field on the site itself (the page JSON is blank too), so `program_name`
+  and `program` are `null`; `run_parallel.py` sends an empty string for them
+  and the model answers with whatever it can (typically "Unknown").
 
 ## 8. Known bugs, limitations and edge cases
 
@@ -438,10 +471,17 @@ and limitations found while building and checking it.
 - **Comments are single paragraphs.** The listing renders one `<p>` per
   comment and no line breaks were observed; newlines are preserved anyway if
   they ever appear.
-- **Site instability.** During the run Grad Cafe answered some requests with
-  read timeouts and HTTP 502. The scraper waits 30 s / 120 s and retries at
-  most twice for those, stops (keeping its checkpoint) if that is not enough,
-  and never retries a 401/403/429.
+- **Site instability.** During the run Grad Cafe answered two requests with
+  read timeouts and then went down site-wide (HTTP 502 even on its front
+  page) for about eight minutes. The scraper waits 30 s / 120 s and retries
+  at most twice for such failures, stops while keeping its checkpoint if that
+  is not enough, and never retries a 401/403/429; the run was resumed once
+  the site answered normally again.
+- **Applicant typos in names.** University and program names are free text
+  on the site: "Harvar", "Banh Mi University" and joke entries exist. They
+  are kept verbatim in `applicant_data.json` (the assignment forbids editing
+  applicant data) and handled, as far as possible, by the standardization
+  step in section 7.
 - **Duplicates across runs.** Cursor pagination is stable, but entries are
   still de-duplicated by result id when resuming and when re-parsing the
   cache, so a page that is fetched twice cannot produce two records.
