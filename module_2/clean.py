@@ -3,7 +3,8 @@ clean.py - Convert raw Grad Cafe listing entries into structured records.
 
 JHU EN.605.256 Modern Software Concepts in Python - Module 2.
 
-Input : the raw entry dicts produced by scrape.py (visible listing text only).
+Input : the raw entry dicts produced by scrape.py (visible listing text plus
+        the page's own JSON record of the entry when it was available).
 Output: one dict per applicant with typed, consistently named fields.  Every
         raw string is carried along unchanged under the "raw" key so any cleaned
         value can be traced back to what the website showed.
@@ -11,14 +12,13 @@ Output: one dict per applicant with typed, consistently named fields.  Every
 Missing or unavailable values are always represented as None (JSON null).
 
 Usage:
-    python clean.py                      # data/raw_entries.json -> applicant_data.json
+    python clean.py                      # data/raw_entries.json[.gz] -> applicant_data.json
     python clean.py --input X --output Y
 """
 
 from __future__ import annotations
 
 import argparse
-import html
 import re
 import sys
 from datetime import date, datetime
@@ -27,11 +27,12 @@ from pathlib import Path
 from scrape import load_data, save_data
 
 # --------------------------------------------------------------------------- #
-# Patterns for the badge ("tag") texts shown under each listing row
+#        Patterns for the badge ("tag") texts shown under each listing row    #
 # --------------------------------------------------------------------------- #
 
 TERM_PATTERN = re.compile(r"^(Fall|Spring|Summer|Winter)\s+(\d{4})$", re.IGNORECASE)
-APPLICANT_TYPE_PATTERN = re.compile(r"^(International|American)$", re.IGNORECASE)
+# The site offers three citizenship values; "Other" is a real answer, not a gap.
+APPLICANT_TYPE_PATTERN = re.compile(r"^(International|American|Other)$", re.IGNORECASE)
 GRE_AW_PATTERN = re.compile(r"^GRE\s*AW\s*:?\s*([\d.]+)$", re.IGNORECASE)
 GRE_V_PATTERN = re.compile(r"^GRE\s*V(?:erbal)?\s*:?\s*([\d.]+)$", re.IGNORECASE)
 GRE_PATTERN = re.compile(r"^GRE\s*(?:General|Q(?:uant)?)?\s*:?\s*([\d.]+)$", re.IGNORECASE)
@@ -54,13 +55,17 @@ STATUS_LABELS = {
     "other": "Other",
 }
 
-HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+# For a few days in March 2026 the site stored an unset citizenship field as
+# the literal "0" and rendered it as a badge; it carries no information.
+PLACEHOLDER_BADGES = {"0"}
+
 DATE_ADDED_FORMATS = ("%b %d, %Y", "%B %d, %Y", "%d %b %Y", "%Y-%m-%d")
-DECISION_DATE_FORMATS = ("%b %d", "%d %b", "%B %d", "%d %B")  # year is not shown on the listing
+DECISION_DATE_FORMATS = ("%b %d", "%d %b", "%B %d", "%d %B")  # year is not shown on the badge
+LEAP_YEAR_ANCHOR = 2000  # lets "Feb 29" parse before the real year is substituted
 
 
 # --------------------------------------------------------------------------- #
-# Public API
+#                                Public API                                   #
 # --------------------------------------------------------------------------- #
 
 
@@ -72,7 +77,7 @@ def clean_data(raw_entries: list[dict]) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# Per-entry cleaning
+#                             Per-entry cleaning                              #
 # --------------------------------------------------------------------------- #
 
 
@@ -153,16 +158,20 @@ def _clean_entry(raw: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Private helpers
+#                              Private helpers                                #
 # --------------------------------------------------------------------------- #
 
 
 def _clean_text(value: object, keep_newlines: bool = False) -> str | None:
-    """Decode HTML entities, drop any leftover tags, collapse whitespace."""
+    """Collapse whitespace; never rewrite characters.
+
+    The scraper already produced entity-decoded, tag-free visible text with
+    BeautifulSoup's get_text(), so decoding or tag-stripping again here could
+    only damage applicant text that legitimately contains '<', '>' or '&'.
+    """
     if value is None:
         return None
-    text = html.unescape(str(value))
-    text = HTML_TAG_PATTERN.sub(" ", text)
+    text = str(value)
     if keep_newlines:
         lines = [" ".join(line.split()) for line in text.splitlines()]
         text = "\n".join(line for line in lines if line)
@@ -172,8 +181,10 @@ def _clean_text(value: object, keep_newlines: bool = False) -> str | None:
 
 
 def _join_program(program_name: str | None, university: str | None) -> str | None:
-    parts = [part for part in (program_name, university) if part]
-    return ", ".join(parts) if parts else None
+    """'Program, University' for the LLM standardizer; None unless both are known."""
+    if program_name and university:
+        return f"{program_name}, {university}"
+    return None
 
 
 def _first_present(*values: object) -> object:
@@ -203,17 +214,22 @@ def _parse_term(text: str | None) -> str | None:
 
 
 def _parse_applicant_type(text: str | None) -> str | None:
-    """'International' / 'American' (any case) -> canonical label; else None."""
+    """'International' / 'American' / 'Other' (any case) -> canonical label; else None."""
     if not text:
         return None
     return text.title() if APPLICANT_TYPE_PATTERN.match(text) else None
 
 
 def _to_number_or_none(value: object) -> int | float | None:
-    """Numeric conversion for JSON payload values that may be None or strings."""
+    """Numeric conversion for JSON payload metrics (ugpa, greq, grev, grew).
+
+    The site stores "not provided" as 0 / "0.00" and hides such badges, so a
+    zero from the payload is treated as missing rather than as a real score.
+    """
     if value is None or value == "":
         return None
-    return _to_number(str(value).strip())
+    number = _to_number(str(value).strip())
+    return None if number == 0 else number
 
 
 def _parse_date_added(text: str | None) -> str | None:
@@ -229,6 +245,7 @@ def _parse_date_added(text: str | None) -> str | None:
 
 
 def _normalize_status(status_text: str | None) -> str | None:
+    """Map badge wording ('Wait listed', 'interviewed', ...) to a canonical label."""
     if not status_text:
         return None
     key = " ".join(status_text.lower().split())
@@ -236,13 +253,7 @@ def _normalize_status(status_text: str | None) -> str | None:
 
 
 def _parse_decision(decision_text: str | None, date_added: str | None) -> tuple[str | None, str | None]:
-    """Split 'Accepted on Sep 09' into ('Accepted', '2026-09-09').
-
-    The listing shows the decision's month and day but not its year.  The year
-    is inferred from the 'date added' year: a decision cannot post-date the
-    entry it belongs to, so if the month/day falls after the date-added
-    month/day the decision is assumed to be from the previous year.
-    """
+    """Split 'Accepted on Sep 09' into ('Accepted', '2026-09-09'); 'Other' -> ('Other', None)."""
     if not decision_text:
         return None, None
     match = DECISION_PATTERN.match(decision_text)
@@ -256,15 +267,25 @@ def _parse_decision(decision_text: str | None, date_added: str | None) -> tuple[
 
 
 def _resolve_decision_date(month_day_text: str, date_added: str | None) -> str | None:
+    """Turn the badge's month/day ('Sep 09') into a full ISO date.
+
+    The badge shows no year, so it is inferred from the 'date added' year: a
+    decision cannot be reported before it happened, so when the month/day
+    falls after the date-added month/day the decision is placed in the
+    previous year.  (clean.py prefers the exact date from the page JSON when
+    it is available; this is the fallback.)  A full date such as
+    'Sep 09, 2026' is accepted as-is.
+    """
     parsed = None
     for fmt in DECISION_DATE_FORMATS:
         try:
-            parsed = datetime.strptime(month_day_text, fmt)
+            # strptime defaults to year 1900, which rejects "Feb 29"; anchor
+            # to a leap year and substitute the inferred year below.
+            parsed = datetime.strptime(f"{LEAP_YEAR_ANCHOR} {month_day_text}", f"%Y {fmt}")
             break
         except ValueError:
             continue
     if parsed is None:
-        # Some rows may carry a full date ("Sep 09, 2026"); accept that too.
         for fmt in DATE_ADDED_FORMATS:
             try:
                 return datetime.strptime(month_day_text, fmt).date().isoformat()
@@ -279,11 +300,12 @@ def _resolve_decision_date(month_day_text: str, date_added: str | None) -> str |
         year -= 1
     try:
         return date(year, parsed.month, parsed.day).isoformat()
-    except ValueError:  # e.g. Feb 29 in a non-leap year
+    except ValueError:  # Feb 29 in a non-leap inferred year
         return None
 
 
 def _to_number(text: str) -> int | float | None:
+    """'163' -> 163, '3.40' -> 3.4, '4.00' -> 4.0 (float kept when the text has a decimal point); else None."""
     try:
         value = float(text)
     except ValueError:
@@ -303,6 +325,8 @@ def _classify_tags(tags: list[str]) -> dict:
         "other_tags": [],
     }
     for tag in tags:
+        if tag in PLACEHOLDER_BADGES:
+            continue  # the site's rendering of an unset field; nothing to keep
         if TERM_PATTERN.match(tag):
             result["term"] = _parse_term(tag)
         elif APPLICANT_TYPE_PATTERN.match(tag):
@@ -315,15 +339,15 @@ def _classify_tags(tags: list[str]) -> dict:
             result["gre"] = _to_number(GRE_PATTERN.match(tag).group(1))
         elif GPA_PATTERN.match(tag):
             result["gpa"] = _to_number(GPA_PATTERN.match(tag).group(1))
-        elif DECISION_PATTERN.match(tag):
-            continue  # decision badge duplicated in the tag row; already captured
+        elif (decision := DECISION_PATTERN.match(tag)) and decision.group("date"):
+            continue  # a dated decision badge repeated in the tag row; already captured
         else:
             result["other_tags"].append(tag)
     return result
 
 
 # --------------------------------------------------------------------------- #
-# Command line
+#                                Command line                                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -334,6 +358,7 @@ def _default_raw_input(script_dir: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Read the raw entries, clean them, and write applicant_data.json."""
     script_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Clean raw Grad Cafe entries into applicant_data.json")
     parser.add_argument("--input", default=str(_default_raw_input(script_dir)),

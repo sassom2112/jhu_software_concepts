@@ -53,7 +53,7 @@ Useful options:
 | `--target N` | stop after at least N entries (default 30000) |
 | `--delay S` | seconds to sleep between page requests (default 2.0) |
 | `--max-pages N` | fetch at most N pages in this run (handy for a quick test) |
-| `--fresh` | ignore the checkpoint and start again from the newest page |
+| `--fresh` | discard the checkpoint, progress log and cached pages, and start again from the newest page |
 | `--reparse-cache` | no network: rebuild the raw entries from `data/raw_html/` |
 | `--no-clean` | skip the cleaning step at the end |
 
@@ -122,9 +122,11 @@ models, which this coursework does not do.
 requests (about 0.3 requests per second), a small and slow retry budget for
 transient failures only (one retry after 30 s for a 5xx response; retries
 after 30 s and then 120 s for a timeout or connection error), and an
-immediate, unconditional stop on HTTP 401 / 403 / 429 or a Cloudflare
-challenge page. Nothing is done to work around a block: the run ends (exit
-code 2 when the site rejects a request, 3 when the network keeps failing),
+immediate, unconditional stop on HTTP 401 / 403 / 429, a Cloudflare
+challenge page (also when it arrives as a 503), or any other HTTP error such
+as 404. Nothing is done to work around a block: the run ends (exit code 2
+when the site rejects a request, 3 when the network keeps failing, 4 for an
+unexpected HTTP status, 5 when the local progress files are inconsistent),
 progress is saved, and it can be resumed later. Only the public listing pages
 are fetched (no login-protected pages, no per-applicant detail pages).
 
@@ -155,7 +157,9 @@ Everything lives in the class `GradCafeScraper`:
 | `_parse_page(html, page_url)` | groups table rows into entries and returns them plus the next URL |
 | `_parse_entry(main_row, extra_rows, page_url)` | pulls the visible text of one applicant row group |
 | `_extract_listing_json(soup)` | reads the JSON copy of the page's entries from `<div id="app" data-page="...">` |
-| `_load_checkpoint` / `_save_checkpoint` / `_append_jsonl` / `_load_jsonl` | resume support |
+| `_resume_point(resume)` | decides where a run starts: checkpoint, fresh start, or a clear error if the local files disagree |
+| `_add_new_entries(entries)` | the single place where entries are de-duplicated by result id |
+| `_load_checkpoint` / `_save_checkpoint` / `_append_jsonl` / `_load_jsonl` | resume support (checkpoint written atomically; a damaged JSONL line is skipped, not fatal) |
 | `_cache_page_html(html, n, url)` | stores each fetched page under `data/raw_html/page_NNNNN.html` |
 
 Module-level `save_data(entries, path)` and `load_data(path)` write/read the
@@ -235,8 +239,8 @@ altered, only parsed. Missing or unavailable values are always `null`.
 | `decision_date` | str `YYYY-MM-DD` | full date from the page JSON (`date_of_notification`); otherwise month/day from the badge with the year inferred (see below) |
 | `decision_date_source` | str | `site_json` or `badge_year_inferred` (null when there is no date) |
 | `term` | str | "Fall 2026", "Spring 2027", ... from the badge row (JSON `season` as fallback) |
-| `us_or_international` | str | `International` or `American` (null when the site records "Other") |
-| `gpa` | float | "GPA 3.57" -> 3.57 (kept exactly as reported, even on a 10-point scale) |
+| `us_or_international` | str | `International`, `American` or `Other` (the three values the site offers); null when the applicant left it unset |
+| `gpa` | float | "GPA 3.57" -> 3.57 (kept exactly as reported, even on a 10-point scale); a zero in the page JSON means "not provided" and stays null |
 | `gre` | int | "GRE 163" -> 163. The site's JSON stores this badge as `greq`, i.e. applicants normally enter the Quantitative score here |
 | `gre_v` | int | "GRE V 158" -> 158 |
 | `gre_aw` | float | "GRE AW 4.00" -> 4.0 |
@@ -256,8 +260,10 @@ about 1.4% of entries (applicants who typed a decision date a few days after
 they posted), which is why the JSON value is preferred. The original badge
 text is always kept in `raw.decision`.
 
-Private helpers: `_clean_entry`, `_clean_text` (HTML entity decoding, tag
-stripping, whitespace collapse), `_join_program`, `_first_present`,
+Private helpers: `_clean_entry`, `_clean_text` (whitespace collapse only: the
+scraper already delivers entity-decoded, tag-free text, and decoding or
+stripping again could damage comments that contain `<`, `>` or `&`),
+`_join_program`, `_first_present`,
 `_parse_iso_date`, `_parse_date_added`, `_normalize_status`,
 `_parse_decision`, `_resolve_decision_date`, `_parse_term`,
 `_parse_applicant_type`, `_to_number`, `_to_number_or_none`,
@@ -336,8 +342,15 @@ and limitations found while building and checking it.
   into a comment, the HTML shows it as `[email protected]` while the page JSON
   holds the real address. `comments` uses the visible HTML text (so it does
   not harvest addresses); the JSON copy is in `data/raw_entries.json.gz`.
-- **Nationality "Other".** Entries whose site record says `status = "Other"`
-  show no International/American badge; `us_or_international` is `null`.
+- **Nationality "Other" and the "0" badge.** The site offers three
+  citizenship answers, so `Other` is kept as a real value. For entries added
+  between March 20 and 27, 2026 the site stored an unset citizenship field as
+  the literal `0` and renders it as a badge; that badge is a placeholder and
+  is dropped (`us_or_international` is `null`).
+- **Zero means "not provided" in the page JSON.** The payload stores an
+  unset GPA as `"0.00"` and unset GRE scores as `0` while hiding the badge, so
+  zeros from the payload are treated as missing. Without that rule the JSON
+  fallback would have invented a GPA of 0.0 for about 16% of applicants.
 - **GPA scales.** GPA is kept exactly as reported. Most values are on a 4.0
   scale but some applicants report other scales (or typos such as 0.1); no
   re-scaling is attempted because the scale is not stated on the site.
@@ -358,3 +371,10 @@ and limitations found while building and checking it.
   `/result/<id>` pages (notification method, institution statistics) are not
   collected; the JSON in the listing already includes the decision date, so
   the extra 30,000 requests were not justified.
+- **Static analysis (Snyk Code).** Snyk flags "path traversal" wherever a
+  command-line option such as `--data-dir` or `--output` becomes a file path,
+  and "SSRF" for the `urlopen` call whose URL comes from the page's "Next"
+  link. Both are inherent to a local command-line scraper: the user chooses
+  the output location on purpose, and every URL is checked against the
+  thegradcafe.com host and robots.txt in `_assert_allowed()` before it is
+  requested, so the scraper cannot be steered to another server.

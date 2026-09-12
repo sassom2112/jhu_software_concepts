@@ -6,20 +6,24 @@ JHU EN.605.256 Modern Software Concepts in Python - Module 2.
 Workflow (urllib-only; no browser automation was needed for this site):
 
   1. Fetch https://www.thegradcafe.com/robots.txt with urllib and confirm with
-     urllib.robotparser that the survey listing is allowed for our user agent.
+     urllib.robotparser (plus an RFC 9309 longest-match check) that the survey
+     listing is allowed for our user agent.
   2. Build the first listing URL with urllib.parse and fetch it with
      urllib.request.
   3. Parse the server-rendered HTML with BeautifulSoup into "raw" entry dicts
-     (every value is the visible text exactly as shown on the listing row).
+     (every value is the visible text exactly as shown on the listing row),
+     and keep the page's own JSON record of each entry next to it.
   4. Follow the page's "Next" link (Grad Cafe uses cursor-based pagination, so
      the next URL is read from the page rather than computed) until the target
      number of entries has been collected, sleeping between requests.
-  5. Persist progress after every page (JSONL + checkpoint) so an interrupted
-     run picks up where it left off, then write the raw entries to JSON.
+  5. Persist progress after every page (JSONL + checkpoint + a copy of the
+     HTML) so an interrupted run picks up where it left off, then write the
+     raw entries to JSON and hand them to clean.py.
 
-The scraper never tries to get around a block: a 401/403/429/5xx response or a
-Cloudflare challenge page stops the run immediately.  Re-running the script
-later resumes from the saved checkpoint.
+The scraper never tries to get around a block: a 401/403/429 response or a
+Cloudflare challenge page stops the run immediately; a 5xx or a network error
+is retried only a couple of times, slowly.  Re-running the script later
+resumes from the saved checkpoint.
 
 Public API used by clean.py and the instructor's tooling:
     GradCafeScraper.scrape_data()  -> list[dict]
@@ -35,6 +39,7 @@ import gzip
 import json
 import logging
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -42,7 +47,6 @@ import urllib.request
 import urllib.robotparser
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup, Tag
@@ -66,14 +70,16 @@ USER_AGENT = (
 DEFAULT_TARGET_ENTRIES = 30_000
 DEFAULT_DELAY_SECONDS = 2.0
 REQUEST_TIMEOUT_SECONDS = 45
-SERVER_ERROR_RETRY_WAIT_SECONDS = 30      # one retry after a 5xx response
+SERVER_ERROR_RETRY_WAIT_SECONDS = 30      # one retry after a plain 5xx response
 NETWORK_RETRY_WAITS_SECONDS = (30, 120)   # two retries after timeouts / connection errors
 SAVE_JSON_EVERY_N_PAGES = 25
+MAX_STALE_PAGES = 3                       # consecutive pages with no new entry -> stop
 
 # Strings that only appear on a Cloudflare interstitial, never on a real page.
 CHALLENGE_MARKERS = ("<title>Just a moment...</title>", "cf-chl-bypass", "challenge-error-text")
 
 RESULT_HREF_PATTERN = re.compile(r"^/result/(\d+)")
+CONTINUATION_ROW_CLASS = "tw-border-none"  # tag row / comment row under a main row
 
 # The listing is an Inertia.js page: <div id="app" data-page="{...}"> carries a
 # JSON copy of the 20 rendered entries (with full ISO decision dates).
@@ -84,15 +90,24 @@ logger = logging.getLogger("gradcafe.scrape")
 
 
 class ScrapeBlockedError(RuntimeError):
-    """Raised when the site blocks, rate-limits, or otherwise rejects a request."""
+    """The site blocked, rate-limited, challenged, or failed a request.
 
-    def __init__(self, message: str, status: int | None = None) -> None:
+    ``retryable`` is True only for a plain 5xx server error (retried once);
+    401/403/429 and challenge pages are never retried.
+    """
+
+    def __init__(self, message: str, status: int | None = None, retryable: bool = False) -> None:
         super().__init__(message)
         self.status = status
+        self.retryable = retryable
 
 
 class ScrapeNetworkError(RuntimeError):
-    """Raised when the network keeps failing (the run stops; resume later)."""
+    """The network kept failing (timeouts / connection errors); resume later."""
+
+
+class ScrapeStateError(RuntimeError):
+    """Local progress files are inconsistent; the user has to decide what to do."""
 
 
 # --------------------------------------------------------------------------- #
@@ -178,7 +193,15 @@ class GradCafeScraper:
         # RobotFileParser.read() would use Python's default user agent, which
         # this site rejects with 403 (and 403 is then treated as "disallow
         # everything").  Fetch the text ourselves and hand it to the parser.
-        robots_text = self._http_get(robots_url)
+        try:
+            robots_text = self._http_get(robots_url)
+        except urllib.error.HTTPError as err:
+            if err.code in (404, 410):
+                # RFC 9309 section 2.3.1.3: an unavailable robots.txt means no restrictions.
+                logger.warning("robots.txt returned HTTP %s; treating as allow-all", err.code)
+                robots_text = ""
+            else:
+                raise
         self._robots.parse(robots_text.splitlines())
         self._robots_text = robots_text
         self._robots_checked = True
@@ -229,7 +252,12 @@ class GradCafeScraper:
     # ------------------------------------------------------------------ #
 
     def _http_get(self, url: str) -> str:
-        """Single GET with our user agent.  Raises ScrapeBlockedError on a block."""
+        """Single GET with our user agent.
+
+        Raises ScrapeBlockedError for 401/403/429/5xx or a challenge page, and
+        re-raises any other HTTPError (404, 410, ...) untouched because those
+        are permanent, not transient.
+        """
         self._assert_allowed(url)
         request = urllib.request.Request(
             url,
@@ -244,7 +272,15 @@ class GradCafeScraper:
                 body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as err:
             if err.code in (401, 403, 429) or err.code >= 500:
-                raise ScrapeBlockedError(f"HTTP {err.code} {err.reason} for {url}", status=err.code) from err
+                # Cloudflare serves its challenge page with HTTP 503: that is a
+                # block (never retried), not a transient server error.
+                try:
+                    error_body = err.read().decode("utf-8", errors="replace")
+                except (OSError, ValueError):
+                    error_body = ""
+                challenged = self._looks_like_challenge(error_body)
+                message = f"HTTP {err.code} {err.reason} for {url}" + (" (challenge page)" if challenged else "")
+                raise ScrapeBlockedError(message, status=err.code, retryable=err.code >= 500 and not challenged) from err
             raise
         if self._looks_like_challenge(body):
             raise ScrapeBlockedError(f"Cloudflare challenge page returned for {url}")
@@ -253,8 +289,9 @@ class GradCafeScraper:
     def _fetch_page(self, url: str) -> str:
         """GET with a small, slow retry budget for transient failures only.
 
-        * 401 / 403 / 429 or a challenge page: stop at once, never retry.
-        * 5xx: wait 30 s and retry once.
+        * 401 / 403 / 429, a challenge page, or any other HTTP error such as
+          404: stop at once, never retry.
+        * plain 5xx: wait 30 s and retry once.
         * timeout / connection error: wait 30 s, retry; wait 120 s, retry;
           then give up with ScrapeNetworkError.
         """
@@ -264,11 +301,13 @@ class GradCafeScraper:
             try:
                 return self._http_get(url)
             except ScrapeBlockedError as err:
-                if err.status is None or err.status < 500 or server_error_retried:
+                if not err.retryable or server_error_retried:
                     raise
                 server_error_retried = True
                 wait_seconds = SERVER_ERROR_RETRY_WAIT_SECONDS
                 logger.warning("%s; waiting %ss then retrying once", err, wait_seconds)
+            except urllib.error.HTTPError:
+                raise  # 404/410/...: permanent, not transient (HTTPError subclasses URLError)
             except (urllib.error.URLError, TimeoutError, OSError) as err:
                 if network_failures >= len(NETWORK_RETRY_WAITS_SECONDS):
                     raise ScrapeNetworkError(f"network failed {network_failures + 1} times for {url}: {err}") from err
@@ -279,6 +318,7 @@ class GradCafeScraper:
 
     @staticmethod
     def _looks_like_challenge(body: str) -> bool:
+        """True when the response is a Cloudflare interstitial, not a listing."""
         return any(marker in body for marker in CHALLENGE_MARKERS)
 
     # ------------------------------------------------------------------ #
@@ -323,14 +363,15 @@ class GradCafeScraper:
     #                      Parsing (BeautifulSoup)                       #
     # ------------------------------------------------------------------ #
 
-    def _parse_page(self, html: str, page_url: str) -> tuple[list[dict], str | None]:
+    def _parse_page(self, html: str, page_url: str, scraped_at: str | None = None) -> tuple[list[dict], str | None]:
         """Turn one listing page into raw entries plus the next-page URL.
 
         Each applicant occupies one main <tr> (school, program/degree, date
-        added, decision, link) optionally followed by a tag row (term,
-        nationality, GPA, GRE badges) and a comment row.  Rows are grouped by
-        walking the table in order and starting a new group at every row that
-        carries a /result/<id> link.
+        added, decision, link) optionally followed by "tw-border-none" rows: a
+        tag row (term, nationality, GPA, GRE badges) and a comment row.  Rows
+        are grouped by walking the table in order, starting a new group at
+        every row that carries a /result/<id> link.  The ad and spacer rows the
+        site inserts between applicants carry neither and are ignored.
         """
         soup = BeautifulSoup(html, self._parser)
         table = soup.find("table")
@@ -345,12 +386,12 @@ class GradCafeScraper:
             link = row.find("a", href=RESULT_HREF_PATTERN)
             if link is not None and len(row.find_all("td", recursive=False)) >= 4:
                 if current_main is not None:
-                    entries.append(self._parse_entry(current_main, current_extra, page_url))
+                    entries.append(self._parse_entry(current_main, current_extra, page_url, scraped_at))
                 current_main, current_extra = row, []
-            elif current_main is not None:
+            elif current_main is not None and CONTINUATION_ROW_CLASS in row.get("class", []):
                 current_extra.append(row)
         if current_main is not None:
-            entries.append(self._parse_entry(current_main, current_extra, page_url))
+            entries.append(self._parse_entry(current_main, current_extra, page_url, scraped_at))
 
         # Attach the page's own JSON record for each entry (may be None).
         json_by_id = self._extract_listing_json(soup)
@@ -385,7 +426,7 @@ class GradCafeScraper:
             if isinstance(record, dict) and isinstance(record.get("id"), int)
         }
 
-    def _parse_entry(self, main_row: Tag, extra_rows: list[Tag], page_url: str) -> dict:
+    def _parse_entry(self, main_row: Tag, extra_rows: list[Tag], page_url: str, scraped_at: str | None = None) -> dict:
         """Extract the raw visible text of one applicant listing."""
         cells = main_row.find_all("td", recursive=False)
         link = main_row.find("a", href=RESULT_HREF_PATTERN)
@@ -436,46 +477,71 @@ class GradCafeScraper:
             "comment_text": "\n".join(comment_parts) if comment_parts else None,
             "listing_json": None,  # filled in by _parse_page from the page payload
             "source_page_url": page_url,
-            "scraped_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "scraped_at": scraped_at or _utc_now(),
         }
 
     # ------------------------------------------------------------------ #
     #                         Persistence / resume                       #
     # ------------------------------------------------------------------ #
 
+    def _add_new_entries(self, entries: list[dict]) -> list[dict]:
+        """Append entries whose result_id has not been seen; return those added."""
+        added: list[dict] = []
+        for entry in entries:
+            result_id = entry["result_id"]
+            if result_id in self._seen_ids:
+                continue
+            self._seen_ids.add(result_id)
+            self.entries.append(entry)
+            added.append(entry)
+        return added
+
     def _load_checkpoint(self) -> dict | None:
+        """Return the saved checkpoint dict, or None when absent or unreadable."""
         if not self.checkpoint_path.exists():
             return None
         try:
-            return json.loads(self.checkpoint_path.read_text(encoding="utf-8"))
+            checkpoint = json.loads(self.checkpoint_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            logger.warning("Checkpoint file unreadable; starting fresh")
+            logger.warning("%s is unreadable", self.checkpoint_path)
             return None
+        return checkpoint if isinstance(checkpoint, dict) else None
 
     def _save_checkpoint(self, next_url: str | None, finished: bool) -> None:
+        """Atomically record where the next run should continue."""
         payload = {
             "next_url": next_url,
             "pages_fetched": self.pages_fetched,
             "entries_collected": len(self.entries),
             "finished": finished,
-            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "updated_at": _utc_now(),
         }
-        self.checkpoint_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path = self.checkpoint_path.with_name(self.checkpoint_path.name + ".tmp")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(self.checkpoint_path)
 
     def _load_jsonl(self) -> None:
+        """Load previously saved entries; a damaged line is skipped, not fatal."""
         if not self.jsonl_path.exists():
             return
+        loaded: list[dict] = []
+        skipped = 0
         with self.jsonl_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
+            for line_number, line in enumerate(handle, start=1):
                 line = line.strip()
                 if not line:
                     continue
-                entry = json.loads(line)
-                if entry["result_id"] not in self._seen_ids:
-                    self._seen_ids.add(entry["result_id"])
-                    self.entries.append(entry)
+                try:
+                    loaded.append(json.loads(line))
+                except json.JSONDecodeError:
+                    skipped += 1
+                    logger.warning("Skipping unreadable line %d of %s", line_number, self.jsonl_path)
+        self._add_new_entries(loaded)
+        if skipped:
+            logger.warning("%d unreadable line(s) ignored in %s", skipped, self.jsonl_path)
 
     def _append_jsonl(self, entries: list[dict]) -> None:
+        """Append entries to the progress log (one JSON object per line)."""
         with self.jsonl_path.open("a", encoding="utf-8") as handle:
             for entry in entries:
                 handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -483,13 +549,13 @@ class GradCafeScraper:
     def _cache_page_html(self, html: str, page_number: int, page_url: str) -> None:
         """Keep a copy of the fetched page so it can be re-parsed offline.
 
-        The first line records the URL it came from; everything after it is the
-        untouched server response.
+        The first line records the source URL and fetch time; everything after
+        it is the untouched server response.
         """
         if not self.cache_html:
             return
         self.html_cache_dir.mkdir(parents=True, exist_ok=True)
-        header = f"<!-- {PRODUCT_TOKEN} source-url: {page_url} -->\n"
+        header = f"<!-- {PRODUCT_TOKEN} source-url: {page_url} fetched-at: {_utc_now()} -->\n"
         (self.html_cache_dir / f"page_{page_number:05d}.html").write_text(header + html, encoding="utf-8")
 
     def reparse_cached_pages(self) -> list[dict]:
@@ -497,28 +563,39 @@ class GradCafeScraper:
 
         Useful after changing the parser: the pages already on disk are parsed
         again in the order they were fetched and de-duplicated by result id.
+        Each entry keeps the fetch time recorded in the cache file header (or
+        the file's modification time for older cache files).
         """
         self.entries.clear()
         self._seen_ids.clear()
         cached = sorted(self.html_cache_dir.glob("page_*.html"))
         if not cached:
-            raise FileNotFoundError(f"No cached pages under {self.html_cache_dir}")
+            raise ScrapeStateError(f"No cached pages under {self.html_cache_dir}; run a scrape first")
         for path in cached:
             text = path.read_text(encoding="utf-8")
-            first_line, _, html = text.partition("\n")
-            match = re.search(r"source-url: (\S+)", first_line)
-            page_url = match.group(1) if match else f"file://{path}"
-            page_entries, _ = self._parse_page(html if match else text, page_url)
-            new_entries = [e for e in page_entries if e["result_id"] not in self._seen_ids]
-            self._seen_ids.update(e["result_id"] for e in new_entries)
-            self.entries.extend(new_entries)
+            first_line, _, remainder = text.partition("\n")
+            url_match = re.search(r"source-url: (\S+)", first_line)
+            time_match = re.search(r"fetched-at: (\S+)", first_line)
+            if url_match:
+                page_url, html = url_match.group(1), remainder
+            else:
+                page_url, html = f"file://{path}", text
+            fetched_at = time_match.group(1) if time_match else datetime.fromtimestamp(
+                path.stat().st_mtime, timezone.utc
+            ).isoformat(timespec="seconds")
+            page_entries, _ = self._parse_page(html, page_url, scraped_at=fetched_at)
+            self._add_new_entries(page_entries)
         logger.info("Re-parsed %d cached pages -> %d entries", len(cached), len(self.entries))
         return self.entries
 
     def _reset_progress(self) -> None:
+        """Discard every trace of earlier runs (used by --fresh only)."""
         for path in (self.jsonl_path, self.checkpoint_path):
             if path.exists():
                 path.unlink()
+        if self.html_cache_dir.exists():
+            shutil.rmtree(self.html_cache_dir)
+            logger.info("Removed cached pages under %s", self.html_cache_dir)
         self.entries.clear()
         self._seen_ids.clear()
         self.pages_fetched = 0
@@ -526,6 +603,35 @@ class GradCafeScraper:
     # ------------------------------------------------------------------ #
     #                            Main loop                               #
     # ------------------------------------------------------------------ #
+
+    def _resume_point(self, resume: bool) -> str | None:
+        """Load earlier progress and return the URL to fetch next (None = nothing to do)."""
+        if not resume:
+            self._reset_progress()
+            return self._build_start_url()
+
+        checkpoint = self._load_checkpoint()
+        if checkpoint is None:
+            if self.jsonl_path.exists():
+                raise ScrapeStateError(
+                    f"{self.checkpoint_path} is missing or unreadable but {self.jsonl_path} exists; "
+                    "restore the checkpoint or re-run with --fresh to start over"
+                )
+            return self._build_start_url()
+
+        self._load_jsonl()
+        self.pages_fetched = int(checkpoint.get("pages_fetched", 0))
+        url = checkpoint.get("next_url")
+        logger.info(
+            "Resuming: %d entries from %d pages already saved; next page = %s",
+            len(self.entries), self.pages_fetched, self._describe_cursor(url or ""),
+        )
+        if url is None:
+            logger.info("Previous run exhausted the listing; nothing more to fetch")
+        elif checkpoint.get("finished") and len(self.entries) >= self.target_entries:
+            logger.info("Previous run already reached the target; nothing to do")
+            url = None
+        return url
 
     def scrape_data(self, resume: bool = True) -> list[dict]:
         """Pull listing pages until *target_entries* raw entries are collected.
@@ -535,30 +641,14 @@ class GradCafeScraper:
         same list is also streamed to data/raw_entries.jsonl as it grows.
         """
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        url = self._resume_point(resume)  # local files first, so a block later cannot lose them
+        if url is None:
+            return self.entries
         if not self.check_robots():
             raise PermissionError("robots.txt does not allow scraping the survey pages")
 
-        checkpoint = self._load_checkpoint() if resume else None
-        if checkpoint:
-            self._load_jsonl()
-            self.pages_fetched = int(checkpoint.get("pages_fetched", 0))
-            url = checkpoint.get("next_url")
-            logger.info(
-                "Resuming: %d entries from %d pages already saved; next page = %s",
-                len(self.entries), self.pages_fetched, self._describe_cursor(url or ""),
-            )
-            if checkpoint.get("finished") or url is None:
-                if len(self.entries) >= self.target_entries:
-                    logger.info("Previous run already reached the target; nothing to do")
-                    return self.entries
-                if url is None:
-                    logger.info("Previous run exhausted the listing; nothing more to fetch")
-                    return self.entries
-        else:
-            self._reset_progress()
-            url = self._build_start_url()
-
         pages_this_run = 0
+        stale_pages = 0
         started = time.monotonic()
         try:
             while url and len(self.entries) < self.target_entries:
@@ -574,10 +664,7 @@ class GradCafeScraper:
                 self._cache_page_html(html, self.pages_fetched, url)
 
                 page_entries, next_url = self._parse_page(html, url)
-                new_entries = [e for e in page_entries if e["result_id"] not in self._seen_ids]
-                for entry in new_entries:
-                    self._seen_ids.add(entry["result_id"])
-                self.entries.extend(new_entries)
+                new_entries = self._add_new_entries(page_entries)
                 self._append_jsonl(new_entries)
                 self._save_checkpoint(next_url, finished=False)
 
@@ -591,19 +678,28 @@ class GradCafeScraper:
                     self._describe_cursor(next_url) if next_url else "none",
                 )
 
+                # Guards against re-requesting the same listing forever.
                 if not page_entries:
                     logger.warning("Page had no entries; stopping to avoid looping on an empty listing")
                     break
+                if next_url == url:
+                    logger.warning("Next link points at the current page; stopping")
+                    next_url = None
+                stale_pages = 0 if new_entries else stale_pages + 1
+                if stale_pages >= MAX_STALE_PAGES:
+                    logger.warning("%d consecutive pages brought no new entries; stopping", stale_pages)
+                    break
+
                 if self.pages_fetched % SAVE_JSON_EVERY_N_PAGES == 0:
                     save_data(self.entries, self.data_dir / "raw_entries.json")
 
                 url = next_url
                 if url and len(self.entries) < self.target_entries:
                     time.sleep(self.delay_seconds)  # politeness delay between requests
-        except (ScrapeBlockedError, ScrapeNetworkError) as err:
-            # Site said no (or the network is down): persist what we have and
-            # stop.  The checkpoint still points at the page that failed, so a
-            # later run resumes there.
+        except (ScrapeBlockedError, ScrapeNetworkError, urllib.error.HTTPError) as err:
+            # Site said no, the network is down, or an unexpected HTTP status:
+            # persist what we have and stop.  The checkpoint still points at the
+            # page that failed, so a later run resumes there.
             logger.error("Stopping: %s", err)
             self._save_checkpoint(url, finished=False)
             raise
@@ -624,6 +720,11 @@ class GradCafeScraper:
 # --------------------------------------------------------------------------- #
 #                                  Helpers                                    #
 # --------------------------------------------------------------------------- #
+
+
+def _utc_now() -> str:
+    """Current UTC time as an ISO-8601 string with second precision."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _clean_text(node: Tag | None) -> str | None:
@@ -689,6 +790,7 @@ def _robots_allows(robots_text: str, agent_token: str, url: str) -> bool:
 
 
 def _lxml_available() -> bool:
+    """True when the faster lxml parser is installed (html.parser otherwise)."""
     try:
         import lxml  # noqa: F401
     except ImportError:
@@ -697,6 +799,7 @@ def _lxml_available() -> bool:
 
 
 def _configure_logging(log_path: Path) -> None:
+    """Log to stdout and to <data-dir>/scrape.log."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
@@ -711,6 +814,7 @@ def _configure_logging(log_path: Path) -> None:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Command-line options for a scrape run."""
     parser = argparse.ArgumentParser(description="Scrape Grad Cafe admissions results.")
     parser.add_argument("--target", type=int, default=DEFAULT_TARGET_ENTRIES,
                         help="stop after collecting at least this many entries (default 30000)")
@@ -725,7 +829,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", default="applicant_data.json",
                         help="cleaned JSON written after scraping (default applicant_data.json)")
     parser.add_argument("--fresh", action="store_true",
-                        help="ignore any checkpoint and start from the first page")
+                        help="discard checkpoint, progress log and cached pages, and start from the first page")
     parser.add_argument("--no-clean", action="store_true",
                         help="skip running clean.py on the scraped entries")
     parser.add_argument("--no-cache-html", action="store_true",
@@ -736,6 +840,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run a scrape (or a cache re-parse), save the raw JSON, then clean it.
+
+    Exit codes: 0 ok, 2 the site rejected a request, 3 the network kept
+    failing, 4 an unexpected HTTP status, 5 inconsistent local files,
+    130 interrupted.  Progress is always saved, so re-running resumes.
+    """
     args = _parse_args(argv)
     script_dir = Path(__file__).resolve().parent
     data_dir = Path(args.data_dir)
@@ -770,9 +880,20 @@ def main(argv: list[str] | None = None) -> int:
         entries = scraper.entries
         exit_code = 3
         logger.error("Network failure. Progress is saved; re-run later to resume.")
+    except urllib.error.HTTPError as err:
+        entries = scraper.entries
+        exit_code = 4
+        logger.error("Unexpected HTTP %s for %s; stopping. Progress is saved.", err.code, err.url)
+    except ScrapeStateError as err:
+        logger.error("%s", err)
+        return 5
     except KeyboardInterrupt:
         entries = scraper.entries
         exit_code = 130
+
+    if not entries:
+        logger.warning("No entries collected; leaving %s untouched", raw_output)
+        return exit_code
 
     save_data(entries, raw_output)
     logger.info("Saved %d raw entries to %s", len(entries), raw_output)
@@ -782,7 +903,7 @@ def main(argv: list[str] | None = None) -> int:
     save_data(entries, gzip_output)
     logger.info("Saved gzip copy to %s", gzip_output)
 
-    if not args.no_clean and entries:
+    if not args.no_clean:
         from clean import clean_data  # local import avoids a circular import at module load
 
         cleaned = clean_data(entries)
