@@ -38,6 +38,7 @@ import base64
 import gzip
 import json
 import logging
+import os
 import re
 import shutil
 import sys
@@ -58,6 +59,9 @@ from bs4 import BeautifulSoup, Tag
 BASE_URL = "https://www.thegradcafe.com"
 SURVEY_PATH = "/survey/"
 ROBOTS_PATH = "/robots.txt"
+ALLOWED_HOST = "www.thegradcafe.com"
+# The only parts of the site this scraper ever needs; everything else is refused.
+ALLOWED_PATH_PREFIXES = ("/survey", "/robots.txt", "/result/")
 
 # Honest, descriptive user agent.  Grad Cafe (via Cloudflare) answers 403 to
 # Python's default "Python-urllib/3.x" agent but serves this one normally.
@@ -236,10 +240,7 @@ class GradCafeScraper:
         return all((std[survey_url], std[result_url], rfc[survey_url], rfc[result_url]))
 
     def _assert_allowed(self, url: str) -> None:
-        """Refuse to fetch anything robots.txt disallows or that is off-site."""
-        parsed = urlparse(url)
-        if parsed.netloc != urlparse(BASE_URL).netloc:
-            raise ValueError(f"Refusing to fetch off-site URL: {url}")
+        """Refuse to fetch anything robots.txt disallows (host/path are checked by _safe_site_url)."""
         if self._robots_checked:
             allowed = self._robots.can_fetch(PRODUCT_TOKEN, url) and _robots_allows(
                 self._robots_text, PRODUCT_TOKEN, url
@@ -258,6 +259,7 @@ class GradCafeScraper:
         re-raises any other HTTPError (404, 410, ...) untouched because those
         are permanent, not transient.
         """
+        url = _safe_site_url(url)  # fixed host + allow-listed path, or ValueError
         self._assert_allowed(url)
         request = urllib.request.Request(
             url,
@@ -353,10 +355,11 @@ class GradCafeScraper:
         for anchor in anchors:
             if anchor.get_text(" ", strip=True).lower().startswith("next"):
                 candidate = urljoin(page_url, anchor["href"])
-                if urlparse(candidate).netloc != urlparse(BASE_URL).netloc:
-                    logger.warning("Ignoring off-site next link %s", candidate)
+                try:
+                    return _safe_site_url(candidate)
+                except ValueError as err:
+                    logger.warning("Ignoring next link: %s", err)
                     return None
-                return candidate
         return None
 
     # ------------------------------------------------------------------ #
@@ -722,6 +725,39 @@ class GradCafeScraper:
 # --------------------------------------------------------------------------- #
 
 
+def _safe_site_url(url: str) -> str:
+    """Rebuild *url* from validated parts, or raise ValueError.
+
+    The scheme and host are always taken from BASE_URL (never from the input)
+    and only the listing, robots.txt and result paths are permitted, so a link
+    found on a page can never send the scraper to another server or to another
+    part of the site.
+    """
+    parsed = urlparse(url)
+    if parsed.netloc.lower() != ALLOWED_HOST:
+        raise ValueError(f"refusing off-site URL {url}")
+    if not parsed.path.startswith(ALLOWED_PATH_PREFIXES):
+        raise ValueError(f"refusing a path outside the public listing: {url}")
+    base = urlparse(BASE_URL)
+    return urlunparse((base.scheme, base.netloc, parsed.path, "", parsed.query, ""))
+
+
+def _confine_path(path: str | Path, roots: tuple[Path, ...]) -> Path:
+    """Resolve *path* and require it to lie inside one of *roots*.
+
+    Data and output locations come from command-line options; refusing
+    anything outside the module folder or the current working directory keeps
+    a mistyped option (or a "../" in it) from touching files elsewhere.
+    """
+    resolved = os.path.realpath(str(path))
+    for root in roots:
+        real_root = os.path.realpath(str(root))
+        if resolved == real_root or resolved.startswith(real_root + os.sep):
+            return Path(resolved)
+    allowed = ", ".join(str(root) for root in roots)
+    raise ValueError(f"{path} is outside the allowed folders ({allowed})")
+
+
 def _utc_now() -> str:
     """Current UTC time as an ISO-8601 string with second precision."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -848,15 +884,21 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = _parse_args(argv)
     script_dir = Path(__file__).resolve().parent
+    allowed_roots = (script_dir, Path.cwd())
     data_dir = Path(args.data_dir)
     if not data_dir.is_absolute():
         data_dir = script_dir / data_dir
-    _configure_logging(data_dir / "scrape.log")
-
-    raw_output = Path(args.raw_output) if args.raw_output else data_dir / "raw_entries.json"
     output = Path(args.output)
     if not output.is_absolute():
         output = script_dir / output
+    try:
+        data_dir = _confine_path(data_dir, allowed_roots)
+        raw_output = _confine_path(args.raw_output or data_dir / "raw_entries.json", allowed_roots)
+        output = _confine_path(output, allowed_roots)
+    except ValueError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    _configure_logging(data_dir / "scrape.log")
 
     scraper = GradCafeScraper(
         target_entries=args.target,

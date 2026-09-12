@@ -23,12 +23,23 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import os
 import sys
 from pathlib import Path
 
 import app  # the instructor's module: canon lists, fix maps, post-normalizers
 
 HERE = Path(__file__).resolve().parent
+
+
+def _confine_path(path: str, roots: tuple[Path, ...]) -> Path:
+    """Resolve *path* and require it to lie inside one of *roots* (module_2 or the current folder)."""
+    resolved = os.path.realpath(str(path))
+    for root in roots:
+        real_root = os.path.realpath(str(root))
+        if resolved == real_root or resolved.startswith(real_root + os.sep):
+            return Path(resolved)
+    raise ValueError(f"{path} is outside the allowed folders ({', '.join(str(r) for r in roots)})")
 
 
 def _append_lines(path: Path, names: list[str]) -> None:
@@ -73,7 +84,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print the additions without writing")
     args = parser.parse_args(argv)
 
-    with open(args.input, "r", encoding="utf-8") as handle:
+    try:
+        input_path = _confine_path(args.input, (HERE.parent, Path.cwd()))
+    except ValueError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    with input_path.open("r", encoding="utf-8") as handle:
         rows = json.load(handle)
     universities = collections.Counter((row.get("university") or "").strip() for row in rows)
     programs = collections.Counter((row.get("program_name") or "").strip() for row in rows)

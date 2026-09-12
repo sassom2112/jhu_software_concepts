@@ -584,6 +584,16 @@ def standardize() -> Any:
     return jsonify({"rows": out})
 
 
+def _confine_path(path: str) -> str:
+    """Student edit: command-line paths must resolve inside module_2 or the current folder."""
+    resolved = os.path.realpath(path)
+    for root in (os.path.dirname(os.path.dirname(os.path.realpath(__file__))), os.getcwd()):
+        real_root = os.path.realpath(root)
+        if resolved == real_root or resolved.startswith(real_root + os.sep):
+            return resolved
+    raise ValueError(f"{path} is outside the allowed folders")
+
+
 def _cli_process_file(
     in_path: str,
     out_path: str | None,
@@ -591,12 +601,13 @@ def _cli_process_file(
     to_stdout: bool,
 ) -> None:
     """Process a JSON file and write JSONL incrementally."""
+    in_path = _confine_path(in_path)  # student edit
     with open(in_path, "r", encoding="utf-8") as f:
         rows = _normalize_input(json.load(f))
 
     sink = sys.stdout if to_stdout else None
     if not to_stdout:
-        out_path = out_path or (in_path + ".jsonl")
+        out_path = _confine_path(out_path or (in_path + ".jsonl"))  # student edit
         mode = "a" if append else "w"
         sink = open(out_path, mode, encoding="utf-8")
 

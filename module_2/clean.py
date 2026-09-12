@@ -24,7 +24,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from scrape import load_data, save_data
+from scrape import _confine_path, load_data, save_data
 
 # --------------------------------------------------------------------------- #
 #        Patterns for the badge ("tag") texts shown under each listing row    #
@@ -366,11 +366,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", default=str(script_dir / "applicant_data.json"),
                         help="destination for the cleaned JSON")
     args = parser.parse_args(argv)
+    # Paths from the command line must stay inside module_2 or the current folder.
+    allowed_roots = (script_dir, Path.cwd())
+    try:
+        input_path = _confine_path(args.input, allowed_roots)
+        output_path = _confine_path(args.output, allowed_roots)
+    except ValueError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
 
-    raw_entries = load_data(args.input)
+    raw_entries = load_data(input_path)
     cleaned = clean_data(raw_entries)
-    save_data(cleaned, args.output)
-    print(f"Cleaned {len(cleaned)} entries -> {args.output}")
+    save_data(cleaned, output_path)
+    print(f"Cleaned {len(cleaned)} entries -> {output_path}")
     return 0
 
 

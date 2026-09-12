@@ -43,6 +43,16 @@ PROGRAM_KEY, UNIVERSITY_KEY = "llm-generated-program", "llm-generated-university
 PROGRESS_EVERY_SECONDS = 60
 
 
+def _confine_path(path: str, roots: tuple[Path, ...]) -> Path:
+    """Resolve *path* and require it to lie inside one of *roots* (module_2 or the current folder)."""
+    resolved = os.path.realpath(str(path))
+    for root in roots:
+        real_root = os.path.realpath(str(root))
+        if resolved == real_root or resolved.startswith(real_root + os.sep):
+            return Path(resolved)
+    raise ValueError(f"{path} is outside the allowed folders ({', '.join(str(r) for r in roots)})")
+
+
 def _read_rows(path: Path) -> list[dict]:
     """Load a JSON array (or {'rows': [...]}) of applicant records."""
     with path.open("r", encoding="utf-8") as handle:
@@ -164,10 +174,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     python = sys.executable
-    work_dir = Path(args.work_dir)
+    allowed_roots = (HERE.parent, Path.cwd())  # module_2 or the current folder
+    try:
+        work_dir = _confine_path(args.work_dir, allowed_roots)
+        input_path = _confine_path(args.input, allowed_roots)
+        output_path = _confine_path(args.output, allowed_roots)
+    except ValueError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = _read_rows(Path(args.input))
+    rows = _read_rows(input_path)
     if args.limit:
         rows = rows[: args.limit]
     texts = list(dict.fromkeys((row or {}).get("program") or "" for row in rows))  # distinct, first-seen order
@@ -210,10 +227,9 @@ def main(argv: list[str] | None = None) -> int:
         extended[UNIVERSITY_KEY] = app._post_normalize_university(university)
         merged.append(extended)
 
-    output = Path(args.output)
-    with output.open("w", encoding="utf-8") as handle:
+    with output_path.open("w", encoding="utf-8") as handle:
         json.dump(merged, handle, indent=2, ensure_ascii=False)
-    print(f"Wrote {len(merged)} rows ({len(texts)} distinct strings) -> {output}", flush=True)
+    print(f"Wrote {len(merged)} rows ({len(texts)} distinct strings) -> {output_path}", flush=True)
     return 0
 
 

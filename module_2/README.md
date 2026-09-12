@@ -60,7 +60,7 @@ Useful options:
 | --- | --- |
 | `--target N` | stop after at least N entries (default 30000) |
 | `--delay S` | seconds to sleep between page requests (default 2.0) |
-| `--max-pages N` | fetch at most N pages in this run (handy for a quick test) |
+| `--max-pages N` | fetch at most N pages in this run (handy for a quick test, e.g. `--max-pages 2 --target 40 --data-dir test_run --output test_run/out.json`) |
 | `--fresh` | discard the checkpoint, progress log and cached pages, and start again from the newest page |
 | `--reparse-cache` | no network: rebuild the raw entries from `data/raw_html/` |
 | `--no-clean` | skip the cleaning step at the end |
@@ -172,7 +172,8 @@ Everything lives in the class `GradCafeScraper`:
 | `_build_start_url()` | builds `https://www.thegradcafe.com/survey/?page=1` with `urlunparse`/`urlencode` |
 | `_next_page_url(soup, page_url)` | finds the "Next" anchor inside `<nav aria-label="Results pagination">`, resolves it with `urljoin`, and refuses off-site hosts |
 | `_describe_cursor(url)` | `parse_qs` + base64 to decode the pagination cursor for readable log lines |
-| `_assert_allowed(url)` | robots + same-host guard run before every request |
+| `_safe_site_url(url)` / `_assert_allowed(url)` | URL rebuilt from the fixed host with an allow-list of paths, then the robots.txt check, before every request |
+| `_confine_path(path, roots)` | command-line paths must resolve inside `module_2` or the current directory |
 | `_http_get(url)` / `_fetch_page(url)` | the single GET, block detection, and the one-retry policy |
 | `_parse_page(html, page_url)` | groups table rows into entries and returns them plus the next URL |
 | `_parse_entry(main_row, extra_rows, page_url)` | pulls the visible text of one applicant row group |
@@ -511,7 +512,12 @@ and limitations found while building and checking it.
 - **Static analysis (Snyk Code).** Snyk flags "path traversal" wherever a
   command-line option such as `--data-dir` or `--output` becomes a file path,
   and "SSRF" for the `urlopen` call whose URL comes from the page's "Next"
-  link. Both are inherent to a local command-line scraper: the user chooses
-  the output location on purpose, and every URL is checked against the
-  thegradcafe.com host and robots.txt in `_assert_allowed()` before it is
-  requested, so the scraper cannot be steered to another server.
+  link. Both flows are validated explicitly: `_safe_site_url()` rebuilds every
+  URL from the fixed `www.thegradcafe.com` host and accepts only the
+  `/survey`, `/robots.txt` and `/result/` paths (then robots.txt is checked
+  again), so a link found on a page can never send the scraper elsewhere;
+  and `_confine_path()` resolves every path given on the command line and
+  refuses anything outside the `module_2` folder or the current working
+  directory (the same rule is applied in `clean.py`, `run_parallel.py`,
+  `extend_canon.py` and the CLI of `app.py`). A test run therefore needs a
+  relative location such as `--data-dir test_run`, not `/tmp/...`.
