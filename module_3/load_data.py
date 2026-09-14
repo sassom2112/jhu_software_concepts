@@ -42,7 +42,7 @@ from typing import Iterable
 import psycopg
 from psycopg import sql
 
-from db_config import TABLE_NAME, describe_target, get_database_url
+from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, describe_target, get_database_url
 from scrape import load_data as load_json  # Module 2 JSON reader (plain or .gz)
 
 HERE = Path(__file__).resolve().parent
@@ -175,7 +175,7 @@ def record_to_row(record: dict) -> tuple | None:
 
 def connect() -> psycopg.Connection:
     """Open a psycopg connection using the environment (see db_config.py)."""
-    return psycopg.connect(get_database_url(), connect_timeout=10)
+    return psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
 
 
 def create_table(conn: psycopg.Connection, reset: bool = False) -> None:
@@ -255,16 +255,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        with connect() as conn:  # commits on success, rolls back on any exception
-            create_table(conn, reset=args.reset)
-            inserted, present, unusable = load_records(conn, records)
-            total = count_rows(conn)
+        conn = connect()
+    except psycopg.ProgrammingError:  # the settings could not even be parsed; do not echo them
+        print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
+        return 2
     except psycopg.OperationalError as err:
         print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}".strip(), file=sys.stderr)
         print("hint: start the database and set DATABASE_URL or PGHOST/PGUSER/PGDATABASE (see README)", file=sys.stderr)
         return 2
+
+    try:
+        with conn:  # commits on success, rolls back on any exception, then closes
+            create_table(conn, reset=args.reset)
+            inserted, present, unusable = load_records(conn, records)
+            total = count_rows(conn)
     except psycopg.Error as err:
-        print(f"error: the load was rolled back: {err}", file=sys.stderr)
+        print(f"error: the load was rolled back and nothing was changed: {err}", file=sys.stderr)
         return 3
 
     print(f"Read {len(records):,} records from {path.name}")

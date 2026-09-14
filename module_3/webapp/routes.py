@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from flask import Blueprint, flash, jsonify, redirect, render_template, url_for
+from flask import Blueprint, flash, get_flashed_messages, jsonify, redirect, render_template, url_for
 from sqlalchemy.exc import SQLAlchemyError
 
 import orm_queries
@@ -25,15 +25,19 @@ bp = Blueprint("analysis", __name__)
 def index():
     """Render every analysis result from the current database contents."""
     analysis, error = None, None
+    messages = get_flashed_messages(with_categories=True)
     try:
         analysis = orm_queries.get_analysis()
     except SQLAlchemyError:
         error = ("The analysis could not be loaded because the database is not reachable. "
                  "Check that PostgreSQL is running and that DATABASE_URL (or PGHOST/PGUSER/PGDATABASE) is set.")
+        # A success message (e.g. from Update Analysis) would contradict the error.
+        messages = [(category, message) for category, message in messages if category != "success"]
     return render_template(
         "analysis.html",
         analysis=analysis,
         error=error,
+        messages=messages,
         pull=manager.status(),
         computed_at=datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
     )

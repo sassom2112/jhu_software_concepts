@@ -13,11 +13,9 @@
 </header>
 
 <main class="page">
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-      <div class="notice notice-{{ category }}" role="status">{{ message }}</div>
-    {% endfor %}
-  {% endwith %}
+  {% for category, message in messages %}
+    <div class="notice notice-{{ category }}" role="status">{{ message }}</div>
+  {% endfor %}
 
   <section class="panel pull-panel">
     <div class="pull-text">
@@ -60,7 +58,9 @@
           {% if answer.lines %}
             <dl class="results">
               {% for label, value in answer.lines %}
-                <div class="result {% if loop.first %}result-main{% endif %}"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+                {% set number, separator, sample = value.partition(" (") %}
+                <div class="result {% if loop.first %}result-main{% endif %}"><dt>{{ label }}</dt>
+                  <dd>{{ number }}{% if separator %}<span class="sample">({{ sample }}</span>{% endif %}</dd></div>
               {% endfor %}
             </dl>
           {% endif %}

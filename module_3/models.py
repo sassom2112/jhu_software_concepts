@@ -9,8 +9,9 @@ SQLAlchemy never creates a second copy of the data (no create_all() here).
 Engine and Session:
   * `engine` is created once from the same environment settings psycopg uses
     (db_config.get_sqlalchemy_url() selects the psycopg 3 driver).  Creating
-    an engine does not open a connection; connections are pooled and checked
-    with pool_pre_ping so a restarted database does not break the web app.
+    an engine does not open a connection; connections are pooled, checked
+    with pool_pre_ping so a restarted database does not break the web app,
+    and give up after a 10-second connect timeout.
   * `SessionLocal` is a sessionmaker; use it as a context manager:
 
         from models import Applicant, SessionLocal
@@ -23,9 +24,12 @@ from __future__ import annotations
 from datetime import date
 
 from sqlalchemy import Date, Float, Integer, Text, create_engine
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from db_config import TABLE_NAME, get_sqlalchemy_url
+import psycopg
+
+from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, get_sqlalchemy_url
 
 
 class Base(DeclarativeBase):
@@ -57,5 +61,15 @@ class Applicant(Base):
         return f"<Applicant p_id={self.p_id} program={self.program!r} status={self.status!r} term={self.term!r}>"
 
 
-engine = create_engine(get_sqlalchemy_url(), pool_pre_ping=True)
+# connect_timeout makes an unreachable host fail after 10 s (the same limit the
+# psycopg scripts use) instead of waiting for the operating system's TCP timeout.
+try:
+    engine = create_engine(
+        get_sqlalchemy_url(),
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+    )
+except (psycopg.ProgrammingError, ValueError, ArgumentError) as error:
+    # Settings that cannot be parsed (bad escape, non-numeric port, ...): say so, never echo them.
+    raise SystemExit(INVALID_SETTINGS_MESSAGE) from error
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)

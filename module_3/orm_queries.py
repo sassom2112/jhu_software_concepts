@@ -27,7 +27,8 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import analysis_common as rules
-from analysis_common import QUESTIONS, format_average, format_count, format_difference, format_percent
+from analysis_common import (QUESTIONS, format_average, format_count, format_difference, format_percent,
+                             format_table)
 from db_config import describe_target
 from models import Applicant, SessionLocal
 
@@ -315,8 +316,6 @@ def get_analysis() -> dict:
 
 
 def _print(answers: list[OrmAnswer], title: str) -> None:
-    from query_data import format_table  # plain-text table helper; no SQL involved
-
     print(title)
     print("=" * len(title))
     for answer in answers:

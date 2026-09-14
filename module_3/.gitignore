@@ -19,6 +19,8 @@ data/raw_entries.json
 data/pull_data.lock
 data/pull_status.json
 data/pull_status.json.tmp
+data/pull_resume.json
+data/pull_resume.json.tmp
 pull_new_applicants.json
 pull_new_applicants_llm.json
 query_results.html

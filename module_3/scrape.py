@@ -606,26 +606,34 @@ class GradCafeScraper:
         logger.info("Re-parsed %d cached pages -> %d entries", len(cached), len(self.entries))
         return self.entries
 
-    def scrape_new_entries(self, known_ids: set[int], max_pages: int = 50, progress=None) -> tuple[list[dict], int]:
-        """Fetch only entries newer than the ones already stored (Module 3 "Pull Data").
+    def scrape_new_entries(self, known_ids: set[int], max_pages: int = 50, progress=None,
+                           start_url: str | None = None) -> tuple[list[dict], int, str | None]:
+        """Fetch only entries that are not stored yet (Module 3 "Pull Data").
 
-        The listing is ordered newest first, so the scraper starts at the first
-        page and stops at the first page that contains an entry whose result id
-        is already known (everything after it is older).  It never touches the
-        checkpoint or progress files of a full scrape.  robots.txt, the
-        politeness delay and the stop-on-block rules apply exactly as in
-        scrape_data().
+        The listing is ordered newest first.  Starting at the first page (or at
+        ``start_url``, a "Next" link saved by an earlier run that ran out of
+        pages), the scraper follows the "Next" links and stops at the first page
+        containing an entry whose result id is already known: everything after
+        it is older.  It never touches the checkpoint or progress files of a
+        full scrape; robots.txt, the politeness delay and the stop-on-block
+        rules apply exactly as in scrape_data().
 
-        Returns (new raw entries, pages fetched).  ``progress`` is an optional
-        callback called as progress(pages_fetched, new_entries_so_far).
+        Returns (new raw entries, pages fetched, resume_url).  resume_url is the
+        next page to fetch when ``max_pages`` ran out before a known entry was
+        reached, so a later run can fill the gap; otherwise it is None.
+        ``progress`` is an optional callback: progress(pages_fetched, new_entries_so_far).
         """
         if not self.check_robots():
             raise PermissionError("robots.txt does not allow (or could not confirm) scraping the survey pages")
-        url: str | None = self._build_start_url()
+        url: str | None = start_url or self._build_start_url()
         seen = set(known_ids)
         new_entries: list[dict] = []
         pages = 0
-        while url and pages < max_pages:
+        while url:
+            if pages >= max_pages:
+                logger.info("new-entries page limit (%d) reached before stored entries; resume at %s",
+                            max_pages, self._describe_cursor(url))
+                return new_entries, pages, url
             html = self._fetch_page(url)
             pages += 1
             page_entries, next_url = self._parse_page(html, url)
@@ -638,10 +646,11 @@ class GradCafeScraper:
                 progress(pages, len(new_entries))
             reached_known = len(fresh) < len(page_entries)
             if not page_entries or reached_known or next_url in (None, url):
-                break
+                return new_entries, pages, None
             url = next_url
-            time.sleep(self.delay_seconds)  # politeness delay between requests
-        return new_entries, pages
+            if pages < max_pages:
+                time.sleep(self.delay_seconds)  # politeness delay between requests
+        return new_entries, pages, None
 
     def _reset_progress(self) -> None:
         """Discard every trace of earlier runs (used by --fresh only)."""

@@ -22,8 +22,9 @@ from dataclasses import dataclass, field
 import psycopg
 from psycopg.rows import dict_row
 
-from analysis_common import QUESTIONS, format_average, format_count, format_difference, format_percent
-from db_config import describe_target, get_database_url
+from analysis_common import (QUESTIONS, format_average, format_count, format_difference, format_percent,
+                             format_table)
+from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, describe_target, get_database_url
 
 
 @dataclass
@@ -51,10 +52,13 @@ WHERE LOWER(TRIM(term)) = 'fall 2026';
 
 SQL_Q2 = r"""
 SELECT
-    COUNT(*) FILTER (WHERE LOWER(TRIM(us_or_international)) = 'international') AS international_entries,
-    COUNT(*)                                                                     AS classified_entries,
-    ROUND(100.0 * COUNT(*) FILTER (WHERE LOWER(TRIM(us_or_international)) = 'international')
-          / NULLIF(COUNT(*), 0), 2)                                              AS percent_international
+    COUNT(*) FILTER (
+        WHERE LOWER(TRIM(us_or_international)) = 'international'
+    ) AS international_entries,
+    COUNT(*) AS classified_entries,
+    ROUND(100.0 * COUNT(*) FILTER (
+        WHERE LOWER(TRIM(us_or_international)) = 'international'
+    ) / NULLIF(COUNT(*), 0), 2) AS percent_international
 FROM applicants
 WHERE LOWER(TRIM(us_or_international)) IN ('international', 'american', 'other');
 """
@@ -215,15 +219,18 @@ EXPLANATIONS = {
          "from a list, so these four schools already arrive with one spelling each (the LLM step only removes "
          "the '(MIT)' suffix), and their Computer Science program names are short and consistent, so both "
          "approaches select the same entries. The fields would diverge on free-text entries: a misspelled or "
-         "abbreviated school or program ('Stanford', 'CMU CS', 'EECS') is caught by the LLM field only when the "
+         "unusually written school or program that the patterns above miss (for example 'Stanferd', "
+         "'Carnegie-Mellon', or 'CS' without the words 'Computer Science') is caught by the LLM field only when the "
          "standardizer maps it to the canonical name, while a hallucinated or over-merged LLM name can add or drop "
          "an entry that the original text classifies correctly.",
     "10": "Groups Fall 2026 entries by degree type, keeps only groups with at least 100 entries (HAVING), and "
           "for each group computes the number of entries, the number and percentage of acceptances, and the "
           "average GPA of the accepted applicants who report a GPA on the 4.0 scale.",
-    "11": "Groups Fall 2026 entries by the LLM-standardized university name, which merges spelling variants of "
-          "the same school, ignores rows the standardizer could not attribute ('Unknown'), sorts by the number "
-          "of entries and keeps the top ten, with the share of each school's entries that report an acceptance.",
+    "11": "Groups Fall 2026 entries by the LLM-standardized university name, which merges most spelling variants "
+          "of the same school, ignores rows the standardizer could not attribute ('Unknown'), sorts by the number "
+          "of entries and keeps the top ten, with the share of each school's entries that report an acceptance. "
+          "A few small leftovers stay separate groups (for example 'Yale' or 'Stanford' written alone, each "
+          "with fewer than ten rows); they are too small to change which schools make the top ten.",
 }
 
 # --------------------------------------------------------------------------- #
@@ -348,15 +355,6 @@ def run_all(conn: psycopg.Connection) -> list[Answer]:
 # --------------------------------------------------------------------------- #
 
 
-def format_table(columns: list[str], rows: list[list[str]]) -> list[str]:
-    """Plain-text table with left-aligned first column and right-aligned numbers."""
-    widths = [max(len(str(v)) for v in [c] + [r[i] for r in rows]) for i, c in enumerate(columns)]
-    def line(values):
-        cells = [str(v).ljust(widths[0]) if i == 0 else str(v).rjust(widths[i]) for i, v in enumerate(values)]
-        return "  ".join(cells)
-    return [line(columns), "  ".join("-" * w for w in widths)] + [line(r) for r in rows]
-
-
 def print_answers(answers: list[Answer], title: str) -> None:
     print(title)
     print("=" * len(title))
@@ -371,11 +369,16 @@ def print_answers(answers: list[Answer], title: str) -> None:
 
 def main() -> int:
     try:
-        with psycopg.connect(get_database_url(), connect_timeout=10) as conn:
-            answers = run_all(conn)
+        conn = psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
+    except psycopg.ProgrammingError:  # unparseable settings; do not echo them
+        print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
+        return 2
     except psycopg.OperationalError as err:
         print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}", file=sys.stderr)
         return 2
+    try:
+        with conn:
+            answers = run_all(conn)
     except psycopg.Error as err:
         print(f"error: query failed: {err}", file=sys.stderr)
         return 3

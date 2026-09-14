@@ -133,3 +133,14 @@ def format_difference(value: object) -> str:
     """Signed whole number: 3 -> '+3', -2 -> '-2', 0 -> '0'."""
     number = int(value or 0)
     return f"{number:+d}" if number else "0"
+
+
+def format_table(columns: list[str], rows: list[list[str]]) -> list[str]:
+    """Plain-text table lines: first column left-aligned, the others right-aligned."""
+    widths = [max(len(str(value)) for value in [column] + [row[i] for row in rows]) for i, column in enumerate(columns)]
+
+    def line(values: list[str]) -> str:
+        cells = [str(v).ljust(widths[0]) if i == 0 else str(v).rjust(widths[i]) for i, v in enumerate(values)]
+        return "  ".join(cells)
+
+    return [line(columns), "  ".join("-" * width for width in widths)] + [line(row) for row in rows]

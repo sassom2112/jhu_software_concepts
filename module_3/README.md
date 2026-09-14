@@ -75,7 +75,8 @@ A local installation (`sudo apt install postgresql`, then `createuser` /
 All programs read the connection from environment variables
 (see `db_config.py` and `.env.example`):
 
-* `DATABASE_URL`, for example `postgresql://gradcafe@localhost:5432/gradcafe`, or
+* `DATABASE_URL`, a URL such as `postgresql://gradcafe@localhost:5432/gradcafe`
+  (a libpq `key=value` string such as `host=localhost dbname=gradcafe` also works), or
 * the standard `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE` (defaults: `localhost`, `5432`, `gradcafe`, `gradcafe`).
 
 The password is supplied by libpq itself, so it never appears in code, URLs
@@ -87,6 +88,24 @@ echo 'localhost:5432:*:gradcafe:choose-a-password' >> ~/.pgpass && chmod 600 ~/.
 
 or export `PGPASSWORD` in the current shell only. psycopg and SQLAlchemy's
 psycopg driver both use libpq, so one setting serves every program.
+
+### 2.3 LLM environment for Pull Data (optional)
+
+Pull Data standardizes new entries with the Module 2 local LLM, which has its
+own environment because `llama-cpp-python` compiles native code (about two
+minutes with gcc):
+
+```bash
+cd llm_hosting
+python3 -m venv .venv
+.venv/bin/pip install --no-binary llama-cpp-python -r requirements.txt
+cd ..
+```
+
+The TinyLlama model (about 670 MB) downloads into `llm_hosting/models/` the
+first time it is needed. Without this environment Pull Data still adds the new
+rows, but their `llm_generated_program` and `llm_generated_university` are left
+empty, so Questions 9 and 11 do not count them. The status message says so.
 
 ## 3. Running everything
 
@@ -119,8 +138,10 @@ then empty), and `--reset` drops and recreates the table first.
 * **Missing and messy values.** Missing values become `NULL`, unparseable or
   non-finite numbers become `NULL` rather than aborting, blank strings become
   `NULL`, and NUL characters (which PostgreSQL text cannot store) are removed.
-* **Error handling.** The whole load is one transaction. A connection failure
-  exits with a clear message and code 2, and any SQL error rolls everything back
+* **Error handling.** The whole load is one transaction. Invalid connection
+  settings or an unreachable server exit with a clear message and code 2. Neither
+  message ever prints a password or the raw setting, and connecting gives up
+  after 10 seconds. Any SQL error during the load rolls everything back
   (code 3).
 
 ## 5. Parts 2 and 3: SQL analysis (`query_data.py`)
@@ -256,10 +277,14 @@ Start it with `python run.py` and open http://127.0.0.1:8080.
   2. `GradCafeScraper.scrape_new_entries()` (new in this module's copy of
      `scrape.py`) walks the newest listing pages and stops at the first page
      containing an already-stored entry, with robots.txt, 2 s delays and
-     stop-on-block unchanged from Module 2;
+     stop-on-block unchanged from Module 2. A run fetches at most 50 pages
+     (about 1,000 entries). If it reaches that limit first, the position is
+     saved in `data/pull_resume.json`, the message says more entries remain, and
+     the next run continues from there, so no gap of missing entries is left;
   3. `clean.clean_data()`;
   4. `llm_hosting/run_parallel.py` adds the LLM columns (answers are cached,
-     so only new program strings reach the model);
+     so only new program strings reach the model); a step that runs longer than
+     30 minutes is stopped and the rows are stored without LLM names;
   5. `load_records()` inserts with `ON CONFLICT (p_id) DO NOTHING`.
 
   Progress and the outcome go to `data/pull_status.json`, which the page polls
@@ -276,14 +301,21 @@ Start it with `python run.py` and open http://127.0.0.1:8080.
   confirms the refresh.
 * **Clear failures.** If Grad Café blocks or rate-limits the scraper, or the
   network or database fails, the page shows a plain-language message and no
-  data is changed. If the LLM environment (`llm_hosting/.venv`, see Module 2)
-  is missing, new rows are stored with empty LLM columns and the message says
-  so.
+  data is changed. If the LLM environment (section 2.3) is missing, new rows
+  are stored with empty LLM columns and the message says so. If PostgreSQL is
+  down, the page shows only that error, never a contradictory success message.
 
 ## 9. Screenshots
 
-`screenshots/` contains the raw SQL console output (`query_data.py`), the ORM
-console output (`orm_queries.py`) and the running Flask page.
+`screenshots/` contains:
+
+* `sql_console_output.png`: the output of `python query_data.py` (raw SQL).
+* `orm_console_output.png`: the output of `python orm_queries.py` (SQLAlchemy ORM).
+* `flask_webpage.png`: the running page at http://127.0.0.1:8080, captured with headless Chrome.
+
+The two console images were rendered into a terminal-style image from the
+programs' captured output of a run on 2026-09-14. The numbers are exactly
+what the programs printed.
 
 ## 10. Known limitations
 
@@ -296,5 +328,4 @@ console output (`orm_queries.py`) and the running Flask page.
   2026-09-12 Cloudflare briefly challenged it, and a pull during such a period
   stops immediately with a message instead of retrying or working around the
   block.
-* The LLM step needs the Module 2 `llm_hosting` environment and its model
-  (about 670 MB, downloaded on first use).
+* The LLM step needs the `llm_hosting` environment and its model (section 2.3).

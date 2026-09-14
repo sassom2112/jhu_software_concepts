@@ -23,7 +23,7 @@ import psycopg
 
 import analysis_common as rules
 import query_data
-from db_config import describe_target, get_database_url
+from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, describe_target, get_database_url
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "query_results.html"
@@ -56,7 +56,10 @@ def _answer_html(answer: query_data.Answer) -> str:
              f"<p class='question'>{html.escape(answer.question)}</p>",
              "<p class='label'>Result</p><div class='result'>"]
     for index, (label, value) in enumerate(answer.lines):
-        value_html = f"<strong>{html.escape(value)}</strong>" if index == 0 else html.escape(value)
+        number, separator, rest = value.partition(" (")  # bold the number, not "(n = ...)"
+        value_html = html.escape(value)
+        if index == 0:
+            value_html = f"<strong>{html.escape(number)}</strong>" + (f" ({html.escape(rest)}" if separator else "")
         parts.append(f"<p>{html.escape(label)}: {value_html}</p>")
     if answer.table:
         parts.append("<table><thead><tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in answer.columns) + "</tr></thead><tbody>")
@@ -93,12 +96,20 @@ def _data_notes(conn: psycopg.Connection) -> str:
 
 def main() -> int:
     try:
-        with psycopg.connect(get_database_url(), connect_timeout=10) as conn:
+        conn = psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
+    except psycopg.ProgrammingError:
+        print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
+        return 2
+    except psycopg.OperationalError as err:
+        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}", file=sys.stderr)
+        return 2
+    try:
+        with conn:
             answers = query_data.run_all(conn)
             notes = _data_notes(conn)
     except psycopg.Error as err:
-        print(f"error: cannot query PostgreSQL at {describe_target()}: {err}", file=sys.stderr)
-        return 2
+        print(f"error: query failed: {err}", file=sys.stderr)
+        return 3
     body = "\n".join(_answer_html(a) for a in answers)
     document = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Module 3 SQL Query Results</title>
 <style>{CSS}</style></head><body>
