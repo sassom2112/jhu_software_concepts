@@ -1,0 +1,135 @@
+"""
+analysis_common.py - Definitions shared by the raw-SQL and SQLAlchemy analyses.
+
+JHU EN.605.256 Modern Software Concepts in Python - Module 3.
+
+query_data.py (handwritten SQL) and orm_queries.py (SQLAlchemy) must answer
+the same questions in the same way, and the console, the PDF and the Flask page
+must format results identically.  Everything they have to agree on lives here:
+the question wording, the matching rules, the valid score ranges and the
+number formatting.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal, ROUND_HALF_UP
+
+# --------------------------------------------------------------------------- #
+#                               Matching rules                                #
+# --------------------------------------------------------------------------- #
+# Text comparisons ignore case and surrounding spaces.
+
+FALL_2026 = "fall 2026"
+FALL_2025 = "fall 2025"
+
+INTERNATIONAL = "international"
+AMERICAN = "american"
+# A nationality classification is "usable" when it is one of the site's three
+# answers; missing or blank values are excluded from the denominator.
+NATIONALITY_CLASSES = ("international", "american", "other")
+
+# ILIKE pattern applied to TRIM(status): "Accepted" (and e.g. "accepted", "Acceptance").
+ACCEPTED_PATTERN = "accept%"
+
+# PostgreSQL regular expressions (Advanced RE syntax; \m and \M are the start
+# and end of a word).  Used with ~* (case-insensitive) unless noted.
+JHU_REGEX = r"(johns?\s+hopkins|\mjhu\M)"
+COMPUTER_SCIENCE_REGEX = r"(computer\s+science|\meecs\M)"
+MASTERS_REGEX = r"^\s*master"
+PHD_REGEX = r"^\s*ph\.?\s*d"
+
+# Question 8 (original `program` text): one case-insensitive pattern per school,
+# plus the acronym MIT matched case-sensitively so words like "mit" do not count.
+ORIGINAL_UNIVERSITY_REGEXES = (
+    r"georgetown",
+    r"massachusetts\s+institute\s+of\s+technology",
+    r"stanford",
+    r"(carnegie\s+mellon|\mcmu\M)",
+)
+MIT_ACRONYM_REGEX = r"\mMIT\M"  # used with ~ (case-sensitive)
+
+# Question 9 (LLM fields): the standardizer produces canonical names.
+LLM_TARGET_UNIVERSITIES = (
+    "georgetown university",
+    "massachusetts institute of technology",
+    "stanford university",
+    "carnegie mellon university",
+)
+
+# A test score or GPA counts as "provided" only when it lies on the official
+# scale.  Applicants often type a 260-340 GRE total into the Quantitative
+# field, or 99.99 into Analytical Writing; averaging those with real section
+# scores would be meaningless.  The stored values are never modified.
+GPA_MIN_EXCLUSIVE = 0.0
+GPA_MAX = 4.0
+GRE_SECTION_MIN = 130.0
+GRE_SECTION_MAX = 170.0
+GRE_AW_MIN = 0.0
+GRE_AW_MAX = 6.0
+
+# Original questions
+MIN_ENTRIES_PER_DEGREE = 100
+TOP_UNIVERSITY_COUNT = 10
+
+# --------------------------------------------------------------------------- #
+#                               Question wording                              #
+# --------------------------------------------------------------------------- #
+
+QUESTIONS = {
+    "1": "How many entries in the database are from applicants who applied for Fall 2026?",
+    "2": "Among entries that provide a nationality classification, what percentage are international students?",
+    "3": "What are the average GPA, GRE Quantitative, GRE Verbal, and GRE Analytical Writing scores "
+         "of applicants who provide each metric?",
+    "4": "What is the average GPA of American applicants who applied for Fall 2026?",
+    "5": "What percentage of Fall 2025 entries are acceptances?",
+    "6": "What is the average GPA of accepted applicants who applied for Fall 2026?",
+    "7": "How many entries are from applicants who applied to Johns Hopkins University for a "
+         "master's degree in Computer Science?",
+    "8": "How many Fall 2026 entries are acceptances from applicants applying for a PhD in Computer "
+         "Science at Georgetown University, MIT, Stanford University, or Carnegie Mellon University "
+         "(using the original downloaded fields)?",
+    "9": "Repeating Question 8 with the LLM-generated program and university fields, how does the "
+         "count compare with the original-field count?",
+    "10": "Original question: For Fall 2026, how do the acceptance rate and the average GPA of accepted "
+          "applicants compare across degree types that have at least 100 entries?",
+    "11": "Original question: Which ten universities (LLM-standardized names) have the most Fall 2026 "
+          "entries, and what percentage of each university's entries report an acceptance?",
+}
+
+# --------------------------------------------------------------------------- #
+#                                  Formatting                                 #
+# --------------------------------------------------------------------------- #
+
+NOT_AVAILABLE = "N/A"
+
+
+def _two_places(value: object) -> str:
+    """Round half-up to two decimals (the same rule as PostgreSQL's ROUND on numeric)."""
+    return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def format_count(value: object) -> str:
+    """Whole number with thousands separators: 30066 -> '30,066'."""
+    if value is None:
+        return "0"
+    return f"{int(value):,}"
+
+
+def format_percent(value: object) -> str:
+    """Two decimals and a percent sign: 46.353 -> '46.35%'."""
+    if value is None:
+        return NOT_AVAILABLE
+    return f"{_two_places(value)}%"
+
+
+def format_average(value: object) -> str:
+    """Two decimals: 3.7712 -> '3.77'."""
+    if value is None:
+        return NOT_AVAILABLE
+    return _two_places(value)
+
+
+def format_difference(value: object) -> str:
+    """Signed whole number: 3 -> '+3', -2 -> '-2', 0 -> '0'."""
+    number = int(value or 0)
+    return f"{number:+d}" if number else "0"

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <p class="eyebrow">JHU EN.605.256 · Module 3</p>
+      <h1>Grad Café Data Analysis</h1>
+    </div>
+    <form method="post" action="{{ url_for('analysis.update_analysis') }}">
+      <button type="submit" class="button button-secondary">Update Analysis</button>
+    </form>
+  </div>
+</header>
+
+<main class="page">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="notice notice-{{ category }}" role="status">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <section class="panel pull-panel">
+    <div class="pull-text">
+      <h2>Pull Data</h2>
+      <p>Pull Data checks Grad Café for newly submitted application results, cleans them with the Module 2
+         code, standardizes program and university names with the local LLM, and adds the new records to the
+         database. Existing records are never changed. Depending on how much new data is available, this can
+         take a few minutes; the page keeps working in the meantime.</p>
+      <p class="pull-status pull-{{ pull.state or 'idle' }}" id="pull-status">
+        {% if pull.running %}<span class="spinner" aria-hidden="true"></span>{% endif %}
+        <span id="pull-message">
+          {%- if pull.message -%}{{ pull.message }}{%- else -%}No pull has been run yet.{%- endif -%}
+        </span>
+      </p>
+    </div>
+    <form method="post" action="{{ url_for('analysis.pull_data') }}">
+      <button type="submit" class="button button-primary" id="pull-button" {% if pull.running %}disabled{% endif %}>
+        {% if pull.running %}Pulling…{% else %}Pull Data{% endif %}
+      </button>
+    </form>
+  </section>
+
+  {% if error %}
+    <div class="notice notice-error" role="alert">{{ error }}</div>
+  {% else %}
+    <section class="summary">
+      <div class="stat"><span class="stat-value">{{ "{:,}".format(analysis.summary.total_entries) }}</span>
+        <span class="stat-label">entries in the database</span></div>
+      <div class="stat"><span class="stat-value">{{ analysis.summary.newest_entry.strftime("%b %d, %Y") if analysis.summary.newest_entry else "–" }}</span>
+        <span class="stat-label">newest entry added</span></div>
+      <div class="stat"><span class="stat-value stat-small">{{ computed_at }}</span>
+        <span class="stat-label">results computed</span></div>
+    </section>
+
+    <section class="grid">
+      {% for answer in analysis.answers %}
+        <article class="card {% if answer.table %}card-wide{% endif %} {% if answer.number|int > 9 %}card-original{% endif %}">
+          <p class="card-number">Question {{ answer.number }}{% if answer.number|int > 9 %} · original{% endif %}</p>
+          <h3>{{ answer.question | replace("Original question: ", "") }}</h3>
+          {% if answer.lines %}
+            <dl class="results">
+              {% for label, value in answer.lines %}
+                <div class="result {% if loop.first %}result-main{% endif %}"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+              {% endfor %}
+            </dl>
+          {% endif %}
+          {% if answer.table %}
+            <div class="table-wrap">
+              <table>
+                <thead><tr>{% for column in answer.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                  {% for row in answer.table %}
+                    <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </section>
+
+    <p class="footnote">Averages include every applicant who reports that metric on its official scale
+      (GPA above 0 and at most 4.0; GRE Verbal and Quantitative 130–170; Analytical Writing 0–6).
+      Grad Café data is self-reported and anonymous, so these figures describe the submissions, not all applicants.</p>
+  {% endif %}
+</main>
+
+<script>
+  // Show Pull Data progress without reloading the page; results change only on Update Analysis.
+  (function () {
+    const message = document.getElementById("pull-message");
+    const box = document.getElementById("pull-status");
+    const button = document.getElementById("pull-button");
+    let wasRunning = {{ "true" if pull.running else "false" }};
+    async function poll() {
+      try {
+        const response = await fetch("{{ url_for('analysis.pull_status') }}", {cache: "no-store"});
+        const status = await response.json();
+        if (status.message) message.textContent = status.message;
+        box.className = "pull-status pull-" + (status.state || "idle");
+        button.disabled = status.running;
+        button.textContent = status.running ? "Pulling…" : "Pull Data";
+        const spinner = box.querySelector(".spinner");
+        if (status.running && !spinner) {
+          const s = document.createElement("span"); s.className = "spinner"; box.prepend(s);
+        } else if (!status.running && spinner) { spinner.remove(); }
+        wasRunning = status.running;
+      } catch (e) { /* the server may be restarting; try again on the next tick */ }
+    }
+    setInterval(poll, 4000);
+  })();
+</script>
+{% endblock %}

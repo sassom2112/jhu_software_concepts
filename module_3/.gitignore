@@ -1,0 +1,30 @@
+# environments and caches
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+
+# Module 2 scraper working files
+data/raw_html/
+data/*.jsonl
+data/*.tmp
+data/*.log
+data/*.pid
+data/checkpoint.json
+data/raw_entries.json
+
+# Module 3 runtime files
+data/pull_data.lock
+data/pull_status.json
+data/pull_status.json.tmp
+pull_new_applicants.json
+pull_new_applicants_llm.json
+query_results.html
+
+# local LLM environment, model and answer cache
+llm_hosting/.venv/
+llm_hosting/models/
+llm_hosting/work*/
+llm_hosting/__pycache__/
