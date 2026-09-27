@@ -95,7 +95,7 @@ def client(app):
 
 
 # --------------------------------------------------------------------------- #
-#                  Lesson 5: a real (throwaway) test database                 #
+#             Database fixtures: a real (throwaway) test database             #
 # --------------------------------------------------------------------------- #
 
 def make_raw_entry(result_id: int, **overrides) -> dict:
@@ -123,6 +123,10 @@ def raw_entries() -> list[dict]:
     """Three fresh fake scraper entries (new dicts every test, so edits never leak)."""
     return [make_raw_entry(9_000_001), make_raw_entry(9_000_002), make_raw_entry(9_000_003)]
 
+@pytest.fixture
+def entry_factory():
+    """make_raw_entry itself, so a test can build entries with exactly the values it needs."""
+    return make_raw_entry
 
 @pytest.fixture(scope="session")
 def database_url() -> str:
