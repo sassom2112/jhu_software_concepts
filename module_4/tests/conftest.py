@@ -8,10 +8,12 @@ that names it as a parameter.
 
 from __future__ import annotations
 
+
 import sys 
 from pathlib import Path
 
 import pytest
+from psycopg.conninfo import conninfo_to_dict
 
 # module_4/src is not an installled package, so tell Pyhton where to find it.
 # This is relative to THIS  file, so it works no matter what dir you run pytest from
@@ -19,6 +21,8 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(SRC))
 
 from webapp import create_app       # noqa: E402 (must come after the sys.path fix above)
+from db_config import get_database_url   # noqa: E402
+from load_data import connect, create_table   # noqa: E402
 
 # A realistic-shaped fake for QUERY_FN: same structure orm_queries.get_analysis()
 # returns in the real app, so templates render exactly the way they would with
@@ -88,4 +92,72 @@ def app(fake_scraper, fake_loader):
 def client(app):
     """Flask's in-process test client, built from the app fixture above."""
     return app.test_client()
-        
+
+
+# --------------------------------------------------------------------------- #
+#                  Lesson 5: a real (throwaway) test database                 #
+# --------------------------------------------------------------------------- #
+
+def make_raw_entry(result_id: int, **overrides) -> dict:
+    """One entry shaped exactly like GradCafeScraper produces it (before clean.py)."""
+    entry = {
+        "result_id": result_id,
+        "url": f"https://www.thegradcafe.com/result/{result_id}",
+        "school_text": "Johns Hopkins University",
+        "program_text": "Computer Science",
+        "degree_text": "Masters",
+        "date_added_text": "Sep 20, 2026",
+        "decision_text": "Accepted on Sep 18",
+        "tags_text": ["Fall 2027", "International", "GPA 3.90"],
+        "comment_text": "Test entry - not real data.",
+        "listing_json": None,
+        "source_page_url": "https://www.thegradcafe.com/survey/?page=1",
+        "scraped_at": "2026-09-20T12:00:00+00:00",
+    }
+    entry.update(overrides)
+    return entry
+
+
+@pytest.fixture
+def raw_entries() -> list[dict]:
+    """Three fresh fake scraper entries (new dicts every test, so edits never leak)."""
+    return [make_raw_entry(9_000_001), make_raw_entry(9_000_002), make_raw_entry(9_000_003)]
+
+
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    """The database the db tests will use -- refused unless its name ends in _test.
+
+    TRUNCATE wipes a table, so this guard is what keeps a mis-set DATABASE_URL
+    from ever emptying the real gradcafe database.
+    """
+    url = get_database_url()
+    dbname = conninfo_to_dict(url).get("dbname") or ""
+    if not dbname.endswith("_test"):
+        pytest.fail(
+            f"refusing to run database tests against {dbname or 'the default database'!r}: "
+            "set DATABASE_URL to a database whose name ends in _test"
+        )
+    return url
+
+
+@pytest.fixture
+def db_conn(database_url):
+    """An autocommit connection to an EMPTY applicants table in the test database."""
+    conn = connect()
+    conn.autocommit = True
+    create_table(conn)
+    conn.execute("TRUNCATE applicants")
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def db_app(db_conn, fake_scraper):
+    """The REAL loader and REAL queries against the test database; only the scraper is fake."""
+    return create_app(scrape_fn=fake_scraper)
+
+
+@pytest.fixture
+def db_client(db_app):
+    return db_app.test_client()
