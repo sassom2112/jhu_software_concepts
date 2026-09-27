@@ -54,6 +54,7 @@
             </dl>
           {% endif %}
           {% if answer.table %}
+            <p class="answer-label">Answer:</p>
             <div class="table-wrap">
               <table>
                 <thead><tr>{% for column in answer.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>

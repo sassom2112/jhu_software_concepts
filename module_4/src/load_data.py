@@ -41,6 +41,7 @@ from typing import Iterable
 
 import psycopg
 from psycopg import sql
+from psycopg.rows import dict_row
 
 from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, describe_target, get_database_url
 from scrape import load_data as load_json  # Module 2 JSON reader (plain or .gz)
@@ -224,6 +225,15 @@ def count_rows(conn: psycopg.Connection) -> int:
     with conn.cursor() as cur:
         cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(TABLE_NAME)))
         return cur.fetchone()[0]
+
+
+def fetch_applicants(conn: psycopg.Connection) -> list[dict]:
+    """Every stored row as a dict keyed by the Module 3 column names, newest p_id first."""
+    column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
+    query = sql.SQL("SELECT {} FROM {} ORDER BY p_id DESC").format(column_list, sql.Identifier(TABLE_NAME))
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query)
+        return cur.fetchall()
 
 
 # --------------------------------------------------------------------------- #

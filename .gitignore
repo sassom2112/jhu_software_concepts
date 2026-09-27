@@ -1,1 +1,8 @@
 .vscode/
+
+# pytest / pytest-cov artifacts: pytest runs from the repo root (see module_4/pytest.ini's
+# --cov=module_4/src path), so its cache and coverage data land here, not in module_4/.
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
