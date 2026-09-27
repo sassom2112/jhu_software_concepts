@@ -92,6 +92,8 @@ LISTING_JSON_ATTRIBUTE = "data-page"
 
 logger = logging.getLogger("gradcafe.scrape")
 
+HERE = Path(__file__).resolve().parent
+
 
 class ScrapeBlockedError(RuntimeError):
     """The site blocked, rate-limited, challenged, or failed a request.
@@ -344,10 +346,14 @@ class GradCafeScraper:
 
     @staticmethod
     def _build_start_url() -> str:
-        """Construct the first listing URL from its components."""
+        """Construct the first listing URL from its components.
+
+        It goes through _safe_site_url like every "Next" link does, so the
+        "next link points at the current page" guards compare the same spelling.
+        """
         base = urlparse(BASE_URL)
         query = urlencode({"page": 1})
-        return urlunparse((base.scheme, base.netloc, SURVEY_PATH, "", query, ""))
+        return _safe_site_url(urlunparse((base.scheme, base.netloc, SURVEY_PATH, "", query, "")))
 
     @staticmethod
     def _describe_cursor(url: str) -> str:
@@ -625,11 +631,11 @@ class GradCafeScraper:
         """
         if not self.check_robots():
             raise PermissionError("robots.txt does not allow (or could not confirm) scraping the survey pages")
-        url: str | None = start_url or self._build_start_url()
+        url = start_url or self._build_start_url()
         seen = set(known_ids)
         new_entries: list[dict] = []
         pages = 0
-        while url:
+        while True:  # every way out is a return below: a known entry, no next page, or the page limit
             if pages >= max_pages:
                 logger.info("new-entries page limit (%d) reached before stored entries; resume at %s",
                             max_pages, self._describe_cursor(url))
@@ -650,7 +656,6 @@ class GradCafeScraper:
             url = next_url
             if pages < max_pages:
                 time.sleep(self.delay_seconds)  # politeness delay between requests
-        return new_entries, pages, None
 
     def _reset_progress(self) -> None:
         """Discard every trace of earlier runs (used by --fresh only)."""
@@ -993,7 +998,7 @@ def main(argv: list[str] | None = None) -> int:
     130 interrupted.  Progress is always saved, so re-running resumes.
     """
     args = _parse_args(argv)
-    script_dir = Path(__file__).resolve().parent
+    script_dir = HERE
     # Command-line options name files and folders inside module_2 (see _local_name).
     try:
         data_dir = script_dir / _local_name(args.data_dir)

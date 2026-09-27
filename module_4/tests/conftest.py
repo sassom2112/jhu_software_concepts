@@ -23,6 +23,7 @@ sys.path.insert(0, str(SRC))
 from webapp import create_app       # noqa: E402 (must come after the sys.path fix above)
 from db_config import get_database_url   # noqa: E402
 from load_data import connect, create_table   # noqa: E402
+from scrape import GradCafeScraper   # noqa: E402
 
 # A realistic-shaped fake for QUERY_FN: same structure orm_queries.get_analysis()
 # returns in the real app, so templates render exactly the way they would with
@@ -165,3 +166,12 @@ def db_app(db_conn, fake_scraper):
 @pytest.fixture
 def db_client(db_app):
     return db_app.test_client()
+
+# --------------------------------------------------------------------------- #
+#              Scraper fixtures: no test ever reaches the internet            #
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def scraper(tmp_path):
+    """A scraper whose data folder (robots copy, progress log, cached pages) is a temporary folder."""
+    return GradCafeScraper(data_dir=tmp_path)
