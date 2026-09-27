@@ -85,12 +85,14 @@ def _data_notes(conn: psycopg.Connection) -> str:
             FROM applicants
         """)
         total, bad_q, totals_q, bad_aw, bad_gpa, naive_q, newest, oldest = cur.fetchone()
-    return (f"<p><b>Database:</b> {total:,} entries added between {oldest:%B %d, %Y} and {newest:%B %d, %Y}.</p>"
+    # An empty table has no oldest/newest date and no average: say so instead of crashing.
+    span = f"added between {oldest:%B %d, %Y} and {newest:%B %d, %Y}" if oldest and newest else "with no dates recorded"
+    return (f"<p><b>Database:</b> {total:,} entries {span}.</p>"
             f"<p><b>Valid-range rule for averages:</b> a score counts as provided only on its official scale "
             f"(GPA above {rules.GPA_MIN_EXCLUSIVE:g} and at most {rules.GPA_MAX:g}; GRE Verbal and Quantitative "
             f"{rules.GRE_SECTION_MIN:g}–{rules.GRE_SECTION_MAX:g}; Analytical Writing {rules.GRE_AW_MIN:g}–{rules.GRE_AW_MAX:g}). "
             f"In this database {bad_q:,} values in the GRE Quantitative column are off that scale, {totals_q:,} of them "
-            f"260–340 composite totals; averaging the column as stored would give {naive_q}. Also excluded: {bad_aw:,} "
+            f"260–340 composite totals; averaging the column as stored would give {rules.format_average(naive_q)}. Also excluded: {bad_aw:,} "
             f"Analytical Writing values and {bad_gpa:,} GPAs off their scales. Stored values are never modified.</p>")
 
 
