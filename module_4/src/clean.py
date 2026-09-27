@@ -26,6 +26,8 @@ from pathlib import Path
 
 from scrape import _local_name, load_data, save_data
 
+HERE = Path(__file__).resolve().parent
+
 # --------------------------------------------------------------------------- #
 #        Patterns for the badge ("tag") texts shown under each listing row    #
 # --------------------------------------------------------------------------- #
@@ -359,7 +361,7 @@ def _default_raw_input(script_dir: Path) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     """Read the raw entries, clean them, and write applicant_data.json."""
-    script_dir = Path(__file__).resolve().parent
+    script_dir = HERE
     parser = argparse.ArgumentParser(description="Clean raw Grad Cafe entries into applicant_data.json")
     parser.add_argument("--input", default=None,
                         help="raw entries file name inside data/ (default raw_entries.json, or its .gz copy)")
