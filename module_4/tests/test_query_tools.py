@@ -104,6 +104,25 @@ def test_sql_and_orm_agree_on_an_empty_table(db_conn):
     assert sql_answers[1][1][0] == ("Percent international", "N/A")    # nothing to divide by
 
 
+def test_q9_counts_llm_university_names_written_as_acronyms(db_conn):
+    # The standardizer does not always expand a name: "MIT" or plain "Stanford" must count too.
+    labels = ["MIT", "Massachusetts Institute of Technology", "Stanford", "CMU", "Georgetown University",
+              "Summit University"]                       # "Summit" contains "mit" but is not MIT
+    records = [
+        {"p_id": 200_000 + i, "program": "Computer Science, Some School", "degree": "PhD", "term": "Fall 2026",
+         "status": "Accepted", "llm_generated_program": "Computer Science", "llm_generated_university": label}
+        for i, label in enumerate(labels)
+    ]
+    with db_conn.transaction():
+        load_records(db_conn, records)
+
+    sql_answers, orm_answers = answers_both_ways(db_conn)
+
+    assert sql_answers == orm_answers
+    q9 = dict(sql_answers[8][1])
+    assert (q9["Original-field count"], q9["LLM-field count"]) == ("0", "5")
+
+
 # --------------------------------------------------------------------------- #
 #                         The three command-line tools                        #
 # --------------------------------------------------------------------------- #

@@ -198,10 +198,10 @@ def main() -&gt; int:
         print(f"error: query failed: {err}", file=sys.stderr)
         return 3
     body = "\n".join(_answer_html(a) for a in answers)
-    document = f"""&lt;!doctype html&gt;&lt;html lang="en"&gt;&lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Module 3 SQL Query Results&lt;/title&gt;
+    document = f"""&lt;!doctype html&gt;&lt;html lang="en"&gt;&lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Module 4 SQL Query Results&lt;/title&gt;
 &lt;style&gt;{CSS}&lt;/style&gt;&lt;/head&gt;&lt;body&gt;
 &lt;h1&gt;Grad Café SQL Analysis: Query Results&lt;/h1&gt;
-&lt;p class="sub"&gt;JHU EN.605.256 Modern Software Concepts in Python · Module 3 · generated {datetime.now():%B %d, %Y %H:%M}&lt;/p&gt;
+&lt;p class="sub"&gt;JHU EN.605.256 Modern Software Concepts in Python · Module 4 · generated {datetime.now():%B %d, %Y %H:%M}&lt;/p&gt;
 &lt;div class="meta"&gt;{notes}
 &lt;p&gt;&lt;b&gt;Matching conventions:&lt;/b&gt; text comparisons ignore capitalization and surrounding spaces; an acceptance is a status
 starting with "accept"; regular expressions use PostgreSQL's ~* (case-insensitive) operator, where \\m and \\M mark word boundaries.&lt;/p&gt;&lt;/div&gt;

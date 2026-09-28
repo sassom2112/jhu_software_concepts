@@ -118,23 +118,18 @@ COMPUTER_SCIENCE_REGEX = r"(computer\s+science|\meecs\M)"
 MASTERS_REGEX = r"^\s*master"
 PHD_REGEX = r"^\s*ph\.?\s*d"
 
-# Question 8 (original `program` text): one case-insensitive pattern per school,
+# Questions 8 and 9: the four universities, one case-insensitive pattern per school,
 # plus the acronym MIT matched case-sensitively so words like "mit" do not count.
-ORIGINAL_UNIVERSITY_REGEXES = (
+# Question 8 applies them to the original `program` text and Question 9 to the
+# LLM-standardized university, which is sometimes an acronym or a short form
+# ("MIT", "Stanford") rather than the full name, so an exact-name list would miss it.
+TARGET_UNIVERSITY_REGEXES = (
     r"georgetown",
     r"massachusetts\s+institute\s+of\s+technology",
     r"stanford",
     r"(carnegie\s+mellon|\mcmu\M)",
 )
 MIT_ACRONYM_REGEX = r"\mMIT\M"  # used with ~ (case-sensitive)
-
-# Question 9 (LLM fields): the standardizer produces canonical names.
-LLM_TARGET_UNIVERSITIES = (
-    "georgetown university",
-    "massachusetts institute of technology",
-    "stanford university",
-    "carnegie mellon university",
-)
 
 # A test score or GPA counts as "provided" only when it lies on the official
 # scale.  Applicants often type a 260-340 GRE total into the Quantitative

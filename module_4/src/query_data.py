@@ -141,10 +141,11 @@ SELECT
     ) AS original_field_count,
     COUNT(*) FILTER (
         WHERE llm_generated_program ~* '(computer\s+science|\meecs\M)'
-          AND LOWER(TRIM(llm_generated_university)) IN ('georgetown university',
-                                                        'massachusetts institute of technology',
-                                                        'stanford university',
-                                                        'carnegie mellon university')
+          AND (   llm_generated_university ~* 'georgetown'
+               OR llm_generated_university ~* 'massachusetts\s+institute\s+of\s+technology'
+               OR llm_generated_university ~  '\mMIT\M'
+               OR llm_generated_university ~* 'stanford'
+               OR llm_generated_university ~* '(carnegie\s+mellon|\mcmu\M)')
     ) AS llm_field_count
 FROM applicants
 WHERE LOWER(TRIM(term)) = 'fall 2026'
@@ -214,15 +215,16 @@ EXPLANATIONS = {
          "in the original program text. MIT is matched both by its full name and by the case-sensitive acronym.",
     "9": "Keeps the term, status and degree restrictions of Question 8 in the WHERE clause and computes both "
          "counts in one pass with FILTER: the first uses the original program text exactly as in Question 8, "
-         "the second uses the LLM-generated program and the LLM-generated university, which must equal one of "
-         "the four canonical university names. The difference is LLM count minus original count. "
+         "the second uses the LLM-generated program and the LLM-generated university, recognized with the same "
+         "school patterns as Question 8, so a standardized name written as an acronym or short form ('MIT', "
+         "'Stanford') counts as well as the full name. The difference is LLM count minus original count. "
          "Why the counts can agree: Grad Café's current submission form has applicants pick their university "
          "from a list, so these four schools already arrive with one spelling each (the LLM step only removes "
          "the '(MIT)' suffix), and their Computer Science program names are short and consistent, so both "
          "approaches select the same entries. The fields would diverge on free-text entries: a misspelled or "
          "unusually written school or program that the patterns above miss (for example 'Stanferd', "
          "'Carnegie-Mellon', or 'CS' without the words 'Computer Science') is caught by the LLM field only when the "
-         "standardizer maps it to the canonical name, while a hallucinated or over-merged LLM name can add or drop "
+         "standardizer maps it to one of these names, while a hallucinated or over-merged LLM name can add or drop "
          "an entry that the original text classifies correctly.",
     "10": "Groups Fall 2026 entries by degree type, keeps only groups with at least 100 entries (HAVING), and "
           "for each group computes the number of entries, the number and percentage of acceptances, and the "

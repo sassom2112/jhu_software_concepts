@@ -1,19 +1,19 @@
 ........................................................................ [ 27%]
 ........................................................................ [ 55%]
-........................................................................ [ 83%]
-............................................                             [100%]
+........................................................................ [ 82%]
+.............................................                            [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.11.13-final-0 _______________
 
 Name                                  Stmts   Miss  Cover   Missing
 -------------------------------------------------------------------
-module_4/src/analysis_common.py          48      0   100%
+module_4/src/analysis_common.py          47      0   100%
 module_4/src/build_query_results.py      58      0   100%
 module_4/src/clean.py                   189      0   100%
 module_4/src/db_config.py                41      0   100%
 module_4/src/load_data.py               129      0   100%
 module_4/src/models.py                   32      0   100%
-module_4/src/orm_queries.py             170      0   100%
+module_4/src/orm_queries.py             172      0   100%
 module_4/src/query_data.py              104      0   100%
 module_4/src/run.py                       5      0   100%
 module_4/src/scrape.py                  612      0   100%
@@ -21,6 +21,6 @@ module_4/src/webapp/__init__.py          22      0   100%
 module_4/src/webapp/routes.py            31      0   100%
 module_4/src/webapp/services.py          37      0   100%
 -------------------------------------------------------------------
-TOTAL                                  1478      0   100%
+TOTAL                                  1479      0   100%
 Required test coverage of 100% reached. Total coverage: 100.00%
-260 passed in 2.10s
+261 passed in 2.10s

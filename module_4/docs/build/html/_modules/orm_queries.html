@@ -160,15 +160,21 @@ def _mentions_computer_science(column):
     return column.op("~*")(rules.COMPUTER_SCIENCE_REGEX)
 
 
-def _original_target_university():
-    """One of the four Question 8 universities, recognized in the original program text."""
-    patterns = [Applicant.program.op("~*")(regex) for regex in rules.ORIGINAL_UNIVERSITY_REGEXES]
-    patterns.append(Applicant.program.op("~")(rules.MIT_ACRONYM_REGEX))
+def _target_university(column):
+    """One of the four Question 8/9 universities in *column*: its name, or the MIT / CMU acronym."""
+    patterns = [column.op("~*")(regex) for regex in rules.TARGET_UNIVERSITY_REGEXES]
+    patterns.append(column.op("~")(rules.MIT_ACRONYM_REGEX))
     return or_(*patterns)
 
 
+def _original_target_university():
+    """One of the four Question 8 universities, recognized in the original program text."""
+    return _target_university(Applicant.program)
+
+
 def _llm_target_university():
-    return _normalized(Applicant.llm_generated_university).in_(rules.LLM_TARGET_UNIVERSITIES)
+    """The same four universities in the LLM-standardized name, which may be an acronym such as 'MIT'."""
+    return _target_university(Applicant.llm_generated_university)
 
 
 def _valid_gpa():
