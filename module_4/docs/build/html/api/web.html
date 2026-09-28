@@ -9,6 +9,7 @@
   <title>Web layer &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -145,10 +146,10 @@ load is rolled back).</p></td>
 <p>webapp - Flask front end for the Grad Café analysis (Module 4).</p>
 <p>create_app() is the application factory.  Every external dependency the
 routes need — the scraper, the loader, the analysis query — is injected as a
-keyword argument with a production default, so tests can call</p>
-<blockquote>
-<div><p>create_app(scrape_fn=fake_scrape, load_fn=fake_load, query_fn=fake_query)</p>
-</div></blockquote>
+keyword argument with a production default, so tests can call:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>create_app(scrape_fn=fake_scrape, load_fn=fake_load, query_fn=fake_query)
+</pre></div>
+</div>
 <p>and get a fully working Flask app wired to fakes, with no real network call
 and no real database required unless a test wants one.</p>
 <dl class="py function">
@@ -177,9 +178,13 @@ through the SQLAlchemy model).</p></li>
 <section id="module-webapp.routes">
 <span id="routes"></span><h2>Routes<a class="headerlink" href="#module-webapp.routes" title="Link to this heading"></a></h2>
 <p>routes.py - The analysis page and its two buttons.</p>
-<p>GET  /analysis          analysis page (reads the database through QUERY_FN on every request)
-POST /pull-data          run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
-POST /update-analysis    no-op that just confirms the page can be refreshed; 409 if busy</p>
+<p>Endpoints:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>GET  /                 redirect to /analysis
+GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
+POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
+POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
+</pre></div>
+</div>
 <dl class="py function">
 <dt class="sig sig-object py" id="webapp.routes.root">
 <span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#root"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.root" title="Link to this definition"></a></dt>
@@ -229,6 +234,12 @@ set it directly to force the busy path (see tests/test_buttons.py).</p>
 <p>Tracks whether a pull is currently in progress, for one Flask process.</p>
 <dl class="field-list simple">
 </dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="webapp.services.PullState.is_running">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_running</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#webapp.services.PullState.is_running" title="Link to this definition"></a></dt>
+<dd><p>True while a pull is in progress.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="webapp.services.PullState.try_start">
 <span class="sig-name descname"><span class="pre">try_start</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#PullState.try_start"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.PullState.try_start" title="Link to this definition"></a></dt>
@@ -288,9 +299,10 @@ is run, the same way any other not-yet-standardized row would.</p>
 <section id="module-run">
 <span id="start-up-script"></span><h2>Start-up script<a class="headerlink" href="#module-run" title="Link to this heading"></a></h2>
 <p>run.py - Start the Grad Café analysis web page.</p>
-<blockquote>
-<div><p>python run.py            # <a class="reference external" href="http://127.0.0.1:8080">http://127.0.0.1:8080</a></p>
-</div></blockquote>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python run.py            # serves the page on port 8080 of this machine
+</pre></div>
+</div>
 <p>FLASK_HOST / PORT change the address.  Debug mode stays off; set
 FLASK_DEBUG=1 only on a development machine.</p>
 </section>

@@ -8,6 +8,7 @@
   <title>analysis_common &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -77,166 +78,166 @@
            <div itemprop="articleBody">
              
   <h1>Source code for analysis_common</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""</span>
-<span class="sd">analysis_common.py - Definitions shared by the raw-SQL and SQLAlchemy analyses.</span>
+<span></span>"""
+analysis_common.py - Definitions shared by the raw-SQL and SQLAlchemy analyses.
 
-<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 3.</span>
+JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 
-<span class="sd">query_data.py (handwritten SQL) and orm_queries.py (SQLAlchemy) must answer</span>
-<span class="sd">the same questions in the same way, and the console, the PDF and the Flask page</span>
-<span class="sd">must format results identically.  Everything they have to agree on lives here:</span>
-<span class="sd">the question wording, the matching rules, the valid score ranges and the</span>
-<span class="sd">number formatting.</span>
-<span class="sd">"""</span>
+query_data.py (handwritten SQL) and orm_queries.py (SQLAlchemy) must answer
+the same questions in the same way, and the console, the PDF and the Flask page
+must format results identically.  Everything they have to agree on lives here:
+the question wording, the matching rules, the valid score ranges and the
+number formatting.
+"""
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+from __future__ import annotations
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span><span class="p">,</span> <span class="n">ROUND_HALF_UP</span>
+from decimal import Decimal, ROUND_HALF_UP
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                               Matching rules                                #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1"># Text comparisons ignore case and surrounding spaces.</span>
+# --------------------------------------------------------------------------- #
+#                               Matching rules                                #
+# --------------------------------------------------------------------------- #
+# Text comparisons ignore case and surrounding spaces.
 
-<span class="n">FALL_2026</span> <span class="o">=</span> <span class="s2">"fall 2026"</span>
-<span class="n">FALL_2025</span> <span class="o">=</span> <span class="s2">"fall 2025"</span>
+FALL_2026 = "fall 2026"
+FALL_2025 = "fall 2025"
 
-<span class="n">INTERNATIONAL</span> <span class="o">=</span> <span class="s2">"international"</span>
-<span class="n">AMERICAN</span> <span class="o">=</span> <span class="s2">"american"</span>
-<span class="c1"># A nationality classification is "usable" when it is one of the site's three</span>
-<span class="c1"># answers; missing or blank values are excluded from the denominator.</span>
-<span class="n">NATIONALITY_CLASSES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"international"</span><span class="p">,</span> <span class="s2">"american"</span><span class="p">,</span> <span class="s2">"other"</span><span class="p">)</span>
+INTERNATIONAL = "international"
+AMERICAN = "american"
+# A nationality classification is "usable" when it is one of the site's three
+# answers; missing or blank values are excluded from the denominator.
+NATIONALITY_CLASSES = ("international", "american", "other")
 
-<span class="c1"># ILIKE pattern applied to TRIM(status): "Accepted" (and e.g. "accepted", "Acceptance").</span>
-<span class="n">ACCEPTED_PATTERN</span> <span class="o">=</span> <span class="s2">"accept%"</span>
+# ILIKE pattern applied to TRIM(status): "Accepted" (and e.g. "accepted", "Acceptance").
+ACCEPTED_PATTERN = "accept%"
 
-<span class="c1"># PostgreSQL regular expressions (Advanced RE syntax; \m and \M are the start</span>
-<span class="c1"># and end of a word).  Used with ~* (case-insensitive) unless noted.</span>
-<span class="n">JHU_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"(johns?\s+hopkins|\mjhu\M)"</span>
-<span class="n">COMPUTER_SCIENCE_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"(computer\s+science|\meecs\M)"</span>
-<span class="n">MASTERS_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"^\s*master"</span>
-<span class="n">PHD_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"^\s*ph\.?\s*d"</span>
+# PostgreSQL regular expressions (Advanced RE syntax; \m and \M are the start
+# and end of a word).  Used with ~* (case-insensitive) unless noted.
+JHU_REGEX = r"(johns?\s+hopkins|\mjhu\M)"
+COMPUTER_SCIENCE_REGEX = r"(computer\s+science|\meecs\M)"
+MASTERS_REGEX = r"^\s*master"
+PHD_REGEX = r"^\s*ph\.?\s*d"
 
-<span class="c1"># Question 8 (original `program` text): one case-insensitive pattern per school,</span>
-<span class="c1"># plus the acronym MIT matched case-sensitively so words like "mit" do not count.</span>
-<span class="n">ORIGINAL_UNIVERSITY_REGEXES</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="sa">r</span><span class="s2">"georgetown"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"massachusetts\s+institute\s+of\s+technology"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"stanford"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"(carnegie\s+mellon|\mcmu\M)"</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">MIT_ACRONYM_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"\mMIT\M"</span>  <span class="c1"># used with ~ (case-sensitive)</span>
+# Question 8 (original `program` text): one case-insensitive pattern per school,
+# plus the acronym MIT matched case-sensitively so words like "mit" do not count.
+ORIGINAL_UNIVERSITY_REGEXES = (
+    r"georgetown",
+    r"massachusetts\s+institute\s+of\s+technology",
+    r"stanford",
+    r"(carnegie\s+mellon|\mcmu\M)",
+)
+MIT_ACRONYM_REGEX = r"\mMIT\M"  # used with ~ (case-sensitive)
 
-<span class="c1"># Question 9 (LLM fields): the standardizer produces canonical names.</span>
-<span class="n">LLM_TARGET_UNIVERSITIES</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="s2">"georgetown university"</span><span class="p">,</span>
-    <span class="s2">"massachusetts institute of technology"</span><span class="p">,</span>
-    <span class="s2">"stanford university"</span><span class="p">,</span>
-    <span class="s2">"carnegie mellon university"</span><span class="p">,</span>
-<span class="p">)</span>
+# Question 9 (LLM fields): the standardizer produces canonical names.
+LLM_TARGET_UNIVERSITIES = (
+    "georgetown university",
+    "massachusetts institute of technology",
+    "stanford university",
+    "carnegie mellon university",
+)
 
-<span class="c1"># A test score or GPA counts as "provided" only when it lies on the official</span>
-<span class="c1"># scale.  Applicants often type a 260-340 GRE total into the Quantitative</span>
-<span class="c1"># field, or 99.99 into Analytical Writing; averaging those with real section</span>
-<span class="c1"># scores would be meaningless.  The stored values are never modified.</span>
-<span class="n">GPA_MIN_EXCLUSIVE</span> <span class="o">=</span> <span class="mf">0.0</span>
-<span class="n">GPA_MAX</span> <span class="o">=</span> <span class="mf">4.0</span>
-<span class="n">GRE_SECTION_MIN</span> <span class="o">=</span> <span class="mf">130.0</span>
-<span class="n">GRE_SECTION_MAX</span> <span class="o">=</span> <span class="mf">170.0</span>
-<span class="n">GRE_AW_MIN</span> <span class="o">=</span> <span class="mf">0.0</span>
-<span class="n">GRE_AW_MAX</span> <span class="o">=</span> <span class="mf">6.0</span>
+# A test score or GPA counts as "provided" only when it lies on the official
+# scale.  Applicants often type a 260-340 GRE total into the Quantitative
+# field, or 99.99 into Analytical Writing; averaging those with real section
+# scores would be meaningless.  The stored values are never modified.
+GPA_MIN_EXCLUSIVE = 0.0
+GPA_MAX = 4.0
+GRE_SECTION_MIN = 130.0
+GRE_SECTION_MAX = 170.0
+GRE_AW_MIN = 0.0
+GRE_AW_MAX = 6.0
 
-<span class="c1"># Original questions</span>
-<span class="n">MIN_ENTRIES_PER_DEGREE</span> <span class="o">=</span> <span class="mi">100</span>
-<span class="n">TOP_UNIVERSITY_COUNT</span> <span class="o">=</span> <span class="mi">10</span>
+# Original questions
+MIN_ENTRIES_PER_DEGREE = 100
+TOP_UNIVERSITY_COUNT = 10
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                               Question wording                              #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+# --------------------------------------------------------------------------- #
+#                               Question wording                              #
+# --------------------------------------------------------------------------- #
 
-<span class="n">QUESTIONS</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"1"</span><span class="p">:</span> <span class="s2">"How many entries in the database are from applicants who applied for Fall 2026?"</span><span class="p">,</span>
-    <span class="s2">"2"</span><span class="p">:</span> <span class="s2">"Among entries that provide a nationality classification, what percentage are international students?"</span><span class="p">,</span>
-    <span class="s2">"3"</span><span class="p">:</span> <span class="s2">"What are the average GPA, GRE Quantitative, GRE Verbal, and GRE Analytical Writing scores "</span>
-         <span class="s2">"of applicants who provide each metric?"</span><span class="p">,</span>
-    <span class="s2">"4"</span><span class="p">:</span> <span class="s2">"What is the average GPA of American applicants who applied for Fall 2026?"</span><span class="p">,</span>
-    <span class="s2">"5"</span><span class="p">:</span> <span class="s2">"What percentage of Fall 2025 entries are acceptances?"</span><span class="p">,</span>
-    <span class="s2">"6"</span><span class="p">:</span> <span class="s2">"What is the average GPA of accepted applicants who applied for Fall 2026?"</span><span class="p">,</span>
-    <span class="s2">"7"</span><span class="p">:</span> <span class="s2">"How many entries are from applicants who applied to Johns Hopkins University for a "</span>
-         <span class="s2">"master's degree in Computer Science?"</span><span class="p">,</span>
-    <span class="s2">"8"</span><span class="p">:</span> <span class="s2">"How many Fall 2026 entries are acceptances from applicants applying for a PhD in Computer "</span>
-         <span class="s2">"Science at Georgetown University, MIT, Stanford University, or Carnegie Mellon University "</span>
-         <span class="s2">"(using the original downloaded fields)?"</span><span class="p">,</span>
-    <span class="s2">"9"</span><span class="p">:</span> <span class="s2">"Repeating Question 8 with the LLM-generated program and university fields, how does the "</span>
-         <span class="s2">"count compare with the original-field count?"</span><span class="p">,</span>
-    <span class="s2">"10"</span><span class="p">:</span> <span class="s2">"Original question: For Fall 2026, how do the acceptance rate and the average GPA of accepted "</span>
-          <span class="s2">"applicants compare across degree types that have at least 100 entries?"</span><span class="p">,</span>
-    <span class="s2">"11"</span><span class="p">:</span> <span class="s2">"Original question: Which ten universities (LLM-standardized names) have the most Fall 2026 "</span>
-          <span class="s2">"entries, and what percentage of each university's entries report an acceptance?"</span><span class="p">,</span>
-<span class="p">}</span>
+QUESTIONS = {
+    "1": "How many entries in the database are from applicants who applied for Fall 2026?",
+    "2": "Among entries that provide a nationality classification, what percentage are international students?",
+    "3": "What are the average GPA, GRE Quantitative, GRE Verbal, and GRE Analytical Writing scores "
+         "of applicants who provide each metric?",
+    "4": "What is the average GPA of American applicants who applied for Fall 2026?",
+    "5": "What percentage of Fall 2025 entries are acceptances?",
+    "6": "What is the average GPA of accepted applicants who applied for Fall 2026?",
+    "7": "How many entries are from applicants who applied to Johns Hopkins University for a "
+         "master's degree in Computer Science?",
+    "8": "How many Fall 2026 entries are acceptances from applicants applying for a PhD in Computer "
+         "Science at Georgetown University, MIT, Stanford University, or Carnegie Mellon University "
+         "(using the original downloaded fields)?",
+    "9": "Repeating Question 8 with the LLM-generated program and university fields, how does the "
+         "count compare with the original-field count?",
+    "10": "Original question: For Fall 2026, how do the acceptance rate and the average GPA of accepted "
+          "applicants compare across degree types that have at least 100 entries?",
+    "11": "Original question: Which ten universities (LLM-standardized names) have the most Fall 2026 "
+          "entries, and what percentage of each university's entries report an acceptance?",
+}
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                                  Formatting                                 #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+# --------------------------------------------------------------------------- #
+#                                  Formatting                                 #
+# --------------------------------------------------------------------------- #
 
-<span class="n">NOT_AVAILABLE</span> <span class="o">=</span> <span class="s2">"N/A"</span>
+NOT_AVAILABLE = "N/A"
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_two_places</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Round half-up to two decimals (the same rule as PostgreSQL's ROUND on numeric)."""</span>
-    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span><span class="o">.</span><span class="n">quantize</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">"0.01"</span><span class="p">),</span> <span class="n">rounding</span><span class="o">=</span><span class="n">ROUND_HALF_UP</span><span class="p">))</span>
+def _two_places(value: object) -&gt; str:
+    """Round half-up to two decimals (the same rule as PostgreSQL's ROUND on numeric)."""
+    return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 <div class="viewcode-block" id="format_count">
 <a class="viewcode-back" href="../api/database.html#analysis_common.format_count">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_count</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Whole number with thousands separators: 30066 -&gt; '30,066'."""</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">"0"</span>
-    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span></div>
+def format_count(value: object) -&gt; str:
+    """Whole number with thousands separators: 30066 -&gt; '30,066'."""
+    if value is None:
+        return "0"
+    return f"{int(value):,}"</div>
 
 
 
 <div class="viewcode-block" id="format_percent">
 <a class="viewcode-back" href="../api/database.html#analysis_common.format_percent">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_percent</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Two decimals and a percent sign: 46.353 -&gt; '46.35%'."""</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">NOT_AVAILABLE</span>
-    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_two_places</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2">%"</span></div>
+def format_percent(value: object) -&gt; str:
+    """Two decimals and a percent sign: 46.353 -&gt; '46.35%'."""
+    if value is None:
+        return NOT_AVAILABLE
+    return f"{_two_places(value)}%"</div>
 
 
 
 <div class="viewcode-block" id="format_average">
 <a class="viewcode-back" href="../api/database.html#analysis_common.format_average">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_average</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Two decimals: 3.7712 -&gt; '3.77'."""</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">NOT_AVAILABLE</span>
-    <span class="k">return</span> <span class="n">_two_places</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+def format_average(value: object) -&gt; str:
+    """Two decimals: 3.7712 -&gt; '3.77'."""
+    if value is None:
+        return NOT_AVAILABLE
+    return _two_places(value)</div>
 
 
 
 <div class="viewcode-block" id="format_difference">
 <a class="viewcode-back" href="../api/database.html#analysis_common.format_difference">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_difference</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Signed whole number: 3 -&gt; '+3', -2 -&gt; '-2', 0 -&gt; '0'."""</span>
-    <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
-    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">number</span><span class="si">:</span><span class="s2">+d</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">number</span> <span class="k">else</span> <span class="s2">"0"</span></div>
+def format_difference(value: object) -&gt; str:
+    """Signed whole number: 3 -&gt; '+3', -2 -&gt; '-2', 0 -&gt; '0'."""
+    number = int(value or 0)
+    return f"{number:+d}" if number else "0"</div>
 
 
 
 <div class="viewcode-block" id="format_table">
 <a class="viewcode-back" href="../api/database.html#analysis_common.format_table">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_table</span><span class="p">(</span><span class="n">columns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Plain-text table lines: first column left-aligned, the others right-aligned."""</span>
-    <span class="n">widths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">column</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">)]</span>
+def format_table(columns: list[str], rows: list[list[str]]) -&gt; list[str]:
+    """Plain-text table lines: first column left-aligned, the others right-aligned."""
+    widths = [max(len(str(value)) for value in [column] + [row[i] for row in rows]) for i, column in enumerate(columns)]
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">line</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="n">cells</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="n">widths</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">rjust</span><span class="p">(</span><span class="n">widths</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">)]</span>
-        <span class="k">return</span> <span class="s2">"  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cells</span><span class="p">)</span>
+    def line(values: list[str]) -&gt; str:
+        cells = [str(v).ljust(widths[0]) if i == 0 else str(v).rjust(widths[i]) for i, v in enumerate(values)]
+        return "  ".join(cells)
 
-    <span class="k">return</span> <span class="p">[</span><span class="n">line</span><span class="p">(</span><span class="n">columns</span><span class="p">),</span> <span class="s2">"  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"-"</span> <span class="o">*</span> <span class="n">width</span> <span class="k">for</span> <span class="n">width</span> <span class="ow">in</span> <span class="n">widths</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">line</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span></div>
+    return [line(columns), "  ".join("-" * width for width in widths)] + [line(row) for row in rows]</div>
 
 </pre></div>
 

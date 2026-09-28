@@ -8,6 +8,7 @@
   <title>load_data &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -77,319 +78,324 @@
            <div itemprop="articleBody">
              
   <h1>Source code for load_data</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""</span>
-<span class="sd">load_data.py - Load the cleaned Grad Cafe data into PostgreSQL.</span>
+<span></span>"""
+load_data.py - Load the cleaned Grad Cafe data into PostgreSQL.
 
-<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 3.</span>
+JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 
-<span class="sd">Reads the Module 2 output (llm_extend_applicant_data.json by default: the</span>
-<span class="sd">cleaned records plus the LLM-standardized program and university) and loads it</span>
-<span class="sd">into a single table, `applicants`, using psycopg 3.</span>
+Reads the Module 2 output (llm_extend_applicant_data.json by default: the
+cleaned records plus the LLM-standardized program and university) and loads it
+into a single table, `applicants`, using psycopg 3.
 
-<span class="sd">Design:</span>
-<span class="sd">  * The table is created if it does not exist (see CREATE_TABLE_SQL).</span>
-<span class="sd">  * p_id is Grad Cafe's own result id (the number in the entry's URL), so it is</span>
-<span class="sd">    a natural, stable primary key: the same entry always gets the same p_id.</span>
-<span class="sd">  * Rows are bulk-copied into a temporary staging table and then inserted with</span>
-<span class="sd">    INSERT ... ON CONFLICT (p_id) DO NOTHING.  Running the loader again, or</span>
-<span class="sd">    loading a file that overlaps the database, never creates duplicates and</span>
-<span class="sd">    never overwrites rows that are already stored.</span>
-<span class="sd">  * Missing values become SQL NULL; numbers that cannot be parsed become NULL</span>
-<span class="sd">    instead of aborting the load; NUL characters (which PostgreSQL text cannot</span>
-<span class="sd">    store) are removed from strings.</span>
-<span class="sd">  * The whole load is one transaction: it either completes or changes nothing.</span>
+Design:
+  * The table is created if it does not exist (see CREATE_TABLE_SQL).
+  * p_id is Grad Cafe's own result id (the number in the entry's URL), so it is
+    a natural, stable primary key: the same entry always gets the same p_id.
+  * Rows are bulk-copied into a temporary staging table and then inserted with
+    INSERT ... ON CONFLICT (p_id) DO NOTHING.  Running the loader again, or
+    loading a file that overlaps the database, never creates duplicates and
+    never overwrites rows that are already stored.
+  * Missing values become SQL NULL; numbers that cannot be parsed become NULL
+    instead of aborting the load; NUL characters (which PostgreSQL text cannot
+    store) are removed from strings.
+  * The whole load is one transaction: it either completes or changes nothing.
 
-<span class="sd">Usage::</span>
-<span class="sd">    python load_data.py                                   # llm_extend_applicant_data.json</span>
-<span class="sd">    python load_data.py --file applicant_data.json        # works without LLM columns too</span>
-<span class="sd">    python load_data.py --reset                           # drop and recreate the table first</span>
+Usage::
 
-<span class="sd">Connection settings come from the environment (see db_config.py); no password</span>
-<span class="sd">is stored in this repository.</span>
-<span class="sd">"""</span>
+    python load_data.py                                   # llm_extend_applicant_data.json
+    python load_data.py --file applicant_data.json        # works without LLM columns too
+    python load_data.py --reset                           # drop and recreate the table first
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+Connection settings come from the environment (see db_config.py); no password
+is stored in this repository.
+"""
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
+from __future__ import annotations
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">psycopg</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">psycopg</span><span class="w"> </span><span class="kn">import</span> <span class="n">sql</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">psycopg.rows</span><span class="w"> </span><span class="kn">import</span> <span class="n">dict_row</span>
+import argparse
+import math
+import os
+import sys
+from datetime import date
+from pathlib import Path
+from typing import Iterable
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">db_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">CONNECT_TIMEOUT_SECONDS</span><span class="p">,</span> <span class="n">INVALID_SETTINGS_MESSAGE</span><span class="p">,</span> <span class="n">TABLE_NAME</span><span class="p">,</span> <span class="n">describe_target</span><span class="p">,</span> <span class="n">get_database_url</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">scrape</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_data</span> <span class="k">as</span> <span class="n">load_json</span>  <span class="c1"># Module 2 JSON reader (plain or .gz)</span>
+import psycopg
+from psycopg import sql
+from psycopg.rows import dict_row
 
-<span class="c1"># The module folder (module_4/, the parent of src/): the command line reads and writes its</span>
-<span class="c1"># data files there, next to src/ rather than inside it, as in Modules 2 and 3.</span>
-<span class="n">HERE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span>
-<span class="n">DEFAULT_INPUT</span> <span class="o">=</span> <span class="s2">"llm_extend_applicant_data.json"</span>
+from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, describe_target, get_database_url
+from scrape import load_data as load_json  # Module 2 JSON reader (plain or .gz)
 
-<span class="c1"># Column order used everywhere in this file.</span>
-<span class="n">COLUMNS</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="s2">"p_id"</span><span class="p">,</span>
-    <span class="s2">"program"</span><span class="p">,</span>
-    <span class="s2">"comments"</span><span class="p">,</span>
-    <span class="s2">"date_added"</span><span class="p">,</span>
-    <span class="s2">"url"</span><span class="p">,</span>
-    <span class="s2">"status"</span><span class="p">,</span>
-    <span class="s2">"term"</span><span class="p">,</span>
-    <span class="s2">"us_or_international"</span><span class="p">,</span>
-    <span class="s2">"gpa"</span><span class="p">,</span>
-    <span class="s2">"gre"</span><span class="p">,</span>
-    <span class="s2">"gre_v"</span><span class="p">,</span>
-    <span class="s2">"gre_aw"</span><span class="p">,</span>
-    <span class="s2">"degree"</span><span class="p">,</span>
-    <span class="s2">"llm_generated_program"</span><span class="p">,</span>
-    <span class="s2">"llm_generated_university"</span><span class="p">,</span>
-<span class="p">)</span>
+# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# data files there, next to src/ rather than inside it, as in Modules 2 and 3.
+HERE = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT = "llm_extend_applicant_data.json"
 
-<span class="n">CREATE_TABLE_SQL</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"""</span>
-<span class="s2">CREATE TABLE IF NOT EXISTS </span><span class="si">{</span><span class="n">TABLE_NAME</span><span class="si">}</span><span class="s2"> (</span>
-<span class="s2">    p_id                     INTEGER PRIMARY KEY,</span>
-<span class="s2">    program                  TEXT,</span>
-<span class="s2">    comments                 TEXT,</span>
-<span class="s2">    date_added               DATE,</span>
-<span class="s2">    url                      TEXT,</span>
-<span class="s2">    status                   TEXT,</span>
-<span class="s2">    term                     TEXT,</span>
-<span class="s2">    us_or_international      TEXT,</span>
-<span class="s2">    gpa                      FLOAT,</span>
-<span class="s2">    gre                      FLOAT,</span>
-<span class="s2">    gre_v                    FLOAT,</span>
-<span class="s2">    gre_aw                   FLOAT,</span>
-<span class="s2">    degree                   TEXT,</span>
-<span class="s2">    llm_generated_program    TEXT,</span>
-<span class="s2">    llm_generated_university TEXT</span>
-<span class="s2">)</span>
-<span class="s2">"""</span>
+# Column order used everywhere in this file.
+COLUMNS = (
+    "p_id",
+    "program",
+    "comments",
+    "date_added",
+    "url",
+    "status",
+    "term",
+    "us_or_international",
+    "gpa",
+    "gre",
+    "gre_v",
+    "gre_aw",
+    "degree",
+    "llm_generated_program",
+    "llm_generated_university",
+)
 
-
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                         Record -&gt; row conversion                            #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+CREATE_TABLE_SQL = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
+    p_id                     INTEGER PRIMARY KEY,
+    program                  TEXT,
+    comments                 TEXT,
+    date_added               DATE,
+    url                      TEXT,
+    status                   TEXT,
+    term                     TEXT,
+    us_or_international      TEXT,
+    gpa                      FLOAT,
+    gre                      FLOAT,
+    gre_v                    FLOAT,
+    gre_aw                   FLOAT,
+    degree                   TEXT,
+    llm_generated_program    TEXT,
+    llm_generated_university TEXT
+)
+"""
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_text</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Trimmed text without NUL characters; empty or missing -&gt; None."""</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"</span><span class="se">\x00</span><span class="s2">"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">text</span> <span class="ow">or</span> <span class="kc">None</span>
+# --------------------------------------------------------------------------- #
+#                         Record -&gt; row conversion                            #
+# --------------------------------------------------------------------------- #
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_float</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A finite float, or None for missing / unparseable / NaN values."""</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">value</span> <span class="o">==</span> <span class="s2">""</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">number</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-    <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">return</span> <span class="n">number</span> <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+def _text(value: object) -&gt; str | None:
+    """Trimmed text without NUL characters; empty or missing -&gt; None."""
+    if value is None:
+        return None
+    text = str(value).replace("\x00", "").strip()
+    return text or None
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_date</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">date</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""ISO 'YYYY-MM-DD' (optionally followed by a time) -&gt; date; otherwise None."""</span>
-    <span class="n">text</span> <span class="o">=</span> <span class="n">_text</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">date</span><span class="o">.</span><span class="n">fromisoformat</span><span class="p">(</span><span class="n">text</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
-    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
+def _float(value: object) -&gt; float | None:
+    """A finite float, or None for missing / unparseable / NaN values."""
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_p_id</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Grad Cafe's result id: the `result_id` key, or the number at the end of the URL."""</span>
-    <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"p_id"</span><span class="p">),</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"result_id"</span><span class="p">)):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">candidate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
-            <span class="k">pass</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">))</span> <span class="ow">or</span> <span class="s2">""</span>
-    <span class="n">tail</span> <span class="o">=</span> <span class="n">url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">"/"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span> <span class="k">if</span> <span class="n">tail</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
+def _date(value: object) -&gt; date | None:
+    """ISO 'YYYY-MM-DD' (optionally followed by a time) -&gt; date; otherwise None."""
+    text = _text(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _p_id(record: dict) -&gt; int | None:
+    """Grad Cafe's result id: the `result_id` key, or the number at the end of the URL."""
+    for candidate in (record.get("p_id"), record.get("result_id")):
+        try:
+            if candidate is not None:
+                return int(candidate)
+        except (TypeError, ValueError):
+            pass
+    url = _text(record.get("url")) or ""
+    tail = url.rstrip("/").rsplit("/", 1)[-1]
+    return int(tail) if tail.isdigit() else None
 
 
 <div class="viewcode-block" id="record_to_row">
 <a class="viewcode-back" href="../api/etl.html#load_data.record_to_row">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">record_to_row</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Map one cleaned Module 2 record onto the applicants columns (None if unusable).</span>
+def record_to_row(record: dict) -&gt; tuple | None:
+    """Map one cleaned Module 2 record onto the applicants columns (None if unusable).
 
-<span class="sd">    `program` keeps the combined "Program, University" text from Module 2; for</span>
-<span class="sd">    the few entries whose program name is blank on Grad Cafe it falls back to</span>
-<span class="sd">    the university so the column still identifies the school.  The LLM columns</span>
-<span class="sd">    accept both the Module 2 spelling (llm-generated-program) and the column</span>
-<span class="sd">    spelling (llm_generated_program).</span>
-<span class="sd">    """</span>
-    <span class="n">p_id</span> <span class="o">=</span> <span class="n">_p_id</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">p_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">program</span> <span class="o">=</span> <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"program"</span><span class="p">))</span> <span class="ow">or</span> <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"university"</span><span class="p">))</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">p_id</span><span class="p">,</span>
-        <span class="n">program</span><span class="p">,</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"comments"</span><span class="p">)),</span>
-        <span class="n">_date</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"date_added"</span><span class="p">)),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">)),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"status"</span><span class="p">)),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"term"</span><span class="p">)),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"us_or_international"</span><span class="p">)),</span>
-        <span class="n">_float</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gpa"</span><span class="p">)),</span>
-        <span class="n">_float</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gre"</span><span class="p">)),</span>
-        <span class="n">_float</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gre_v"</span><span class="p">)),</span>
-        <span class="n">_float</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gre_aw"</span><span class="p">)),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"degree"</span><span class="p">)),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"llm-generated-program"</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"llm_generated_program"</span><span class="p">))),</span>
-        <span class="n">_text</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"llm-generated-university"</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"llm_generated_university"</span><span class="p">))),</span>
-    <span class="p">)</span></div>
+    `program` keeps the combined "Program, University" text from Module 2; for
+    the few entries whose program name is blank on Grad Cafe it falls back to
+    the university so the column still identifies the school.  The LLM columns
+    accept both the Module 2 spelling (llm-generated-program) and the column
+    spelling (llm_generated_program).
+    """
+    p_id = _p_id(record)
+    if p_id is None:
+        return None
+    program = _text(record.get("program")) or _text(record.get("university"))
+    return (
+        p_id,
+        program,
+        _text(record.get("comments")),
+        _date(record.get("date_added")),
+        _text(record.get("url")),
+        _text(record.get("status")),
+        _text(record.get("term")),
+        _text(record.get("us_or_international")),
+        _float(record.get("gpa")),
+        _float(record.get("gre")),
+        _float(record.get("gre_v")),
+        _float(record.get("gre_aw")),
+        _text(record.get("degree")),
+        _text(record.get("llm-generated-program", record.get("llm_generated_program"))),
+        _text(record.get("llm-generated-university", record.get("llm_generated_university"))),
+    )</div>
 
 
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                               Database work                                 #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+# --------------------------------------------------------------------------- #
+#                               Database work                                 #
+# --------------------------------------------------------------------------- #
 
 
 <div class="viewcode-block" id="connect">
 <a class="viewcode-back" href="../api/etl.html#load_data.connect">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">connect</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Open a psycopg connection using the environment (see db_config.py)."""</span>
-    <span class="k">return</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">get_database_url</span><span class="p">(),</span> <span class="n">connect_timeout</span><span class="o">=</span><span class="n">CONNECT_TIMEOUT_SECONDS</span><span class="p">)</span></div>
+def connect() -&gt; psycopg.Connection:
+    """Open a psycopg connection using the environment (see db_config.py)."""
+    return psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)</div>
 
 
 
 <div class="viewcode-block" id="create_table">
 <a class="viewcode-back" href="../api/etl.html#load_data.create_table">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">create_table</span><span class="p">(</span><span class="n">conn</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Create the applicants table (optionally dropping it first)."""</span>
-    <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">reset</span><span class="p">:</span>
-            <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">"DROP TABLE IF EXISTS </span><span class="si">{}</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">TABLE_NAME</span><span class="p">)))</span>
-        <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">CREATE_TABLE_SQL</span><span class="p">)</span></div>
+def create_table(conn: psycopg.Connection, reset: bool = False) -&gt; None:
+    """Create the applicants table (optionally dropping it first)."""
+    with conn.cursor() as cur:
+        if reset:
+            cur.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(TABLE_NAME)))
+        cur.execute(CREATE_TABLE_SQL)</div>
 
 
 
 <div class="viewcode-block" id="load_records">
 <a class="viewcode-back" href="../api/etl.html#load_data.load_records">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">load_records</span><span class="p">(</span><span class="n">conn</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="n">records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Insert records that are not in the table yet.</span>
+def load_records(conn: psycopg.Connection, records: Iterable[dict]) -&gt; tuple[int, int, int]:
+    """Insert records that are not in the table yet.
 
-<span class="sd">    Returns (inserted, already_present, unusable).  Existing rows are never</span>
-<span class="sd">    modified.  The caller controls the transaction.</span>
-<span class="sd">    """</span>
-    <span class="n">rows</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">unusable</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">:</span>
-        <span class="n">row</span> <span class="o">=</span> <span class="n">record_to_row</span><span class="p">(</span><span class="n">record</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">row</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">unusable</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="k">continue</span>
-        <span class="n">rows</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">row</span><span class="p">)</span>  <span class="c1"># first occurrence wins inside one file</span>
+    Returns (inserted, already_present, unusable).  Existing rows are never
+    modified.  The caller controls the transaction.
+    """
+    rows: dict[int, tuple] = {}
+    unusable = 0
+    for record in records:
+        row = record_to_row(record) if isinstance(record, dict) else None
+        if row is None:
+            unusable += 1
+            continue
+        rows.setdefault(row[0], row)  # first occurrence wins inside one file
 
-    <span class="n">column_list</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">", "</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">COLUMNS</span><span class="p">)</span>
-    <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
-        <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">"CREATE TEMP TABLE applicants_staging (LIKE </span><span class="si">{}</span><span class="s2"> INCLUDING DEFAULTS) ON COMMIT DROP"</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">TABLE_NAME</span><span class="p">))</span>
-        <span class="p">)</span>
-        <span class="k">with</span> <span class="n">cur</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">"COPY applicants_staging (</span><span class="si">{}</span><span class="s2">) FROM STDIN"</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">column_list</span><span class="p">))</span> <span class="k">as</span> <span class="n">copy</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="n">copy</span><span class="o">.</span><span class="n">write_row</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-        <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">"INSERT INTO </span><span class="si">{}</span><span class="s2"> (</span><span class="si">{cols}</span><span class="s2">) SELECT </span><span class="si">{cols}</span><span class="s2"> FROM applicants_staging ON CONFLICT (p_id) DO NOTHING"</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">TABLE_NAME</span><span class="p">),</span> <span class="n">cols</span><span class="o">=</span><span class="n">column_list</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">inserted</span> <span class="o">=</span> <span class="n">cur</span><span class="o">.</span><span class="n">rowcount</span>
-        <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"DROP TABLE applicants_staging"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">inserted</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="o">-</span> <span class="n">inserted</span><span class="p">,</span> <span class="n">unusable</span></div>
+    column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("CREATE TEMP TABLE applicants_staging (LIKE {} INCLUDING DEFAULTS) ON COMMIT DROP")
+            .format(sql.Identifier(TABLE_NAME))
+        )
+        with cur.copy(sql.SQL("COPY applicants_staging ({}) FROM STDIN").format(column_list)) as copy:
+            for row in rows.values():
+                copy.write_row(row)
+        cur.execute(
+            sql.SQL("INSERT INTO {} ({cols}) SELECT {cols} FROM applicants_staging ON CONFLICT (p_id) DO NOTHING")
+            .format(sql.Identifier(TABLE_NAME), cols=column_list)
+        )
+        inserted = cur.rowcount
+        cur.execute("DROP TABLE applicants_staging")
+    return inserted, len(rows) - inserted, unusable</div>
 
 
 
 <div class="viewcode-block" id="count_rows">
 <a class="viewcode-back" href="../api/etl.html#load_data.count_rows">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">count_rows</span><span class="p">(</span><span class="n">conn</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Number of rows currently stored in the applicants table."""</span>
-    <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
-        <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">"SELECT COUNT(*) FROM </span><span class="si">{}</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">TABLE_NAME</span><span class="p">)))</span>
-        <span class="k">return</span> <span class="n">cur</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span></div>
+def count_rows(conn: psycopg.Connection) -&gt; int:
+    """Number of rows currently stored in the applicants table."""
+    with conn.cursor() as cur:
+        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(TABLE_NAME)))
+        return cur.fetchone()[0]</div>
 
 
 
 <div class="viewcode-block" id="fetch_applicants">
 <a class="viewcode-back" href="../api/etl.html#load_data.fetch_applicants">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">fetch_applicants</span><span class="p">(</span><span class="n">conn</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Every stored row as a dict keyed by the Module 3 column names, newest p_id first."""</span>
-    <span class="n">column_list</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">", "</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">COLUMNS</span><span class="p">)</span>
-    <span class="n">query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">"SELECT </span><span class="si">{}</span><span class="s2"> FROM </span><span class="si">{}</span><span class="s2"> ORDER BY p_id DESC"</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">column_list</span><span class="p">,</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">TABLE_NAME</span><span class="p">))</span>
-    <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">(</span><span class="n">row_factory</span><span class="o">=</span><span class="n">dict_row</span><span class="p">)</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
-        <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">cur</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span></div>
+def fetch_applicants(conn: psycopg.Connection) -&gt; list[dict]:
+    """Every stored row as a dict keyed by the Module 3 column names, newest p_id first."""
+    column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
+    query = sql.SQL("SELECT {} FROM {} ORDER BY p_id DESC").format(column_list, sql.Identifier(TABLE_NAME))
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query)
+        return cur.fetchall()</div>
 
 
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                                Command line                                 #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+# --------------------------------------------------------------------------- #
+#                                Command line                                 #
+# --------------------------------------------------------------------------- #
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_local_file</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Input files are looked up in the module folder (HERE) by bare name (no path traversal)."""</span>
-    <span class="n">base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">normpath</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">base</span> <span class="ow">or</span> <span class="n">base</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"."</span><span class="p">,</span> <span class="s2">".."</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not a usable file name: </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">HERE</span> <span class="o">/</span> <span class="n">base</span>
+def _local_file(name: str) -&gt; Path:
+    """Input files are looked up in the module folder (HERE) by bare name (no path traversal)."""
+    base = os.path.basename(os.path.normpath(name))
+    if not base or base in (".", ".."):
+        raise ValueError(f"not a usable file name: {name!r}")
+    return HERE / base
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Load cleaned Grad Cafe data into PostgreSQL"</span><span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--file"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DEFAULT_INPUT</span><span class="p">,</span>
-                        <span class="n">help</span><span class="o">=</span><span class="sa">f</span><span class="s2">"JSON (or .json.gz) file name in the module folder (default </span><span class="si">{</span><span class="n">DEFAULT_INPUT</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--reset"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span>
-                        <span class="n">help</span><span class="o">=</span><span class="s2">"drop and recreate the applicants table before loading"</span><span class="p">)</span>
-    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../api/etl.html#load_data.main">[docs]</a>
+def main(argv: list[str] | None = None) -&gt; int:
+    """Command line: load a JSON file; returns 0, 1 (unreadable input), 2 (cannot connect) or 3 (rolled back)."""
+    parser = argparse.ArgumentParser(description="Load cleaned Grad Cafe data into PostgreSQL")
+    parser.add_argument("--file", default=DEFAULT_INPUT,
+                        help=f"JSON (or .json.gz) file name in the module folder (default {DEFAULT_INPUT})")
+    parser.add_argument("--reset", action="store_true",
+                        help="drop and recreate the applicants table before loading")
+    args = parser.parse_args(argv)
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">_local_file</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">file</span><span class="p">)</span>
-        <span class="n">records</span> <span class="o">=</span> <span class="n">load_json</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-    <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"error: cannot read input: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">1</span>
+    try:
+        path = _local_file(args.file)
+        records = load_json(path)
+    except (OSError, ValueError) as err:
+        print(f"error: cannot read input: {err}", file=sys.stderr)
+        return 1
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="n">connect</span><span class="p">()</span>
-    <span class="k">except</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">ProgrammingError</span><span class="p">:</span>  <span class="c1"># the settings could not even be parsed; do not echo them</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">INVALID_SETTINGS_MESSAGE</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">2</span>
-    <span class="k">except</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">OperationalError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"error: cannot connect to PostgreSQL at </span><span class="si">{</span><span class="n">describe_target</span><span class="p">()</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">"</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">"hint: start the database and set DATABASE_URL or PGHOST/PGUSER/PGDATABASE (see README)"</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">2</span>
+    try:
+        conn = connect()
+    except psycopg.ProgrammingError:  # the settings could not even be parsed; do not echo them
+        print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
+        return 2
+    except psycopg.OperationalError as err:
+        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}".strip(), file=sys.stderr)
+        print("hint: start the database and set DATABASE_URL or PGHOST/PGUSER/PGDATABASE (see README)", file=sys.stderr)
+        return 2
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">with</span> <span class="n">conn</span><span class="p">:</span>  <span class="c1"># commits on success, rolls back on any exception, then closes</span>
-            <span class="n">create_table</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">reset</span><span class="p">)</span>
-            <span class="n">inserted</span><span class="p">,</span> <span class="n">present</span><span class="p">,</span> <span class="n">unusable</span> <span class="o">=</span> <span class="n">load_records</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">records</span><span class="p">)</span>
-            <span class="n">total</span> <span class="o">=</span> <span class="n">count_rows</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
-    <span class="k">except</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Error</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"error: the load was rolled back and nothing was changed: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">3</span>
+    try:
+        with conn:  # commits on success, rolls back on any exception, then closes
+            create_table(conn, reset=args.reset)
+            inserted, present, unusable = load_records(conn, records)
+            total = count_rows(conn)
+    except psycopg.Error as err:
+        print(f"error: the load was rolled back and nothing was changed: {err}", file=sys.stderr)
+        return 3
 
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Read </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">records</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> records from </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Inserted </span><span class="si">{</span><span class="n">inserted</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> new rows; </span><span class="si">{</span><span class="n">present</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> were already present; </span><span class="si">{</span><span class="n">unusable</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> unusable records skipped"</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"applicants table now holds </span><span class="si">{</span><span class="n">total</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> rows"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="mi">0</span>
+    print(f"Read {len(records):,} records from {path.name}")
+    print(f"Inserted {inserted:,} new rows; {present:,} were already present; {unusable:,} unusable records skipped")
+    print(f"applicants table now holds {total:,} rows")
+    return 0</div>
 
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
-    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+
+if __name__ == "__main__":
+    sys.exit(main())
 </pre></div>
 
            </div>

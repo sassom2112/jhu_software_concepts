@@ -36,6 +36,12 @@ autodoc_default_options = {"members": True, "show-inheritance": True}
 templates_path: list[str] = []
 exclude_patterns: list[str] = []
 
+# Literal blocks in the docstrings are shell commands and tables, not Python:
+# show them as plain text (explicit ``code-block:: bash`` blocks still highlight).
+highlight_language = "none"
+
 html_theme = "sphinx_rtd_theme"
 html_title = "Grad Café Analytics"
 html_show_sourcelink = False
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]   # wrap long table cells

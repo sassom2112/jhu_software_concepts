@@ -1,7 +1,9 @@
 """
 run.py - Start the Grad Café analysis web page.
 
-    python run.py            # http://127.0.0.1:8080
+Usage::
+
+    python run.py            # serves the page on port 8080 of this machine
 
 FLASK_HOST / PORT change the address.  Debug mode stays off; set
 FLASK_DEBUG=1 only on a development machine.

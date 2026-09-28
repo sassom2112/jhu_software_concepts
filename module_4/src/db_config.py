@@ -94,7 +94,7 @@ def get_sqlalchemy_url():
 
 
 def describe_target() -> str:
-    """user@host:port/dbname for messages; never raises and never shows a password or the raw setting."""
+    """``user@host:port/dbname`` for messages; never raises and never shows a password or the raw setting."""
     try:
         params = conninfo_to_dict(get_database_url())
     except (psycopg.ProgrammingError, ValueError):

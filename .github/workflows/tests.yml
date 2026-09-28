@@ -2,7 +2,7 @@
 #
 # GitHub only runs workflows from .github/workflows at the repository root, so this file is the
 # one that runs.  module_4/.github/workflows/tests.yml is an identical copy kept with the
-# assignment; the first step of the test job fails if the two ever differ.
+# assignment; the step right after checkout fails if the two ever differ.
 name: tests
 
 on:

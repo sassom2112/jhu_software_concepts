@@ -8,6 +8,7 @@
   <title>models &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -77,87 +78,87 @@
            <div itemprop="articleBody">
              
   <h1>Source code for models</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""</span>
-<span class="sd">models.py - SQLAlchemy 2.x ORM mapping of the existing `applicants` table.</span>
+<span></span>"""
+models.py - SQLAlchemy 2.x ORM mapping of the existing `applicants` table.
 
-<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 3.</span>
+JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 
-<span class="sd">The Applicant class maps onto the very table load_data.py creates and fills;</span>
-<span class="sd">SQLAlchemy never creates a second copy of the data (no create_all() here).</span>
+The Applicant class maps onto the very table load_data.py creates and fills;
+SQLAlchemy never creates a second copy of the data (no create_all() here).
 
-<span class="sd">Engine and Session:</span>
-<span class="sd">  * `engine` is created once from the same environment settings psycopg uses</span>
-<span class="sd">    (db_config.get_sqlalchemy_url() selects the psycopg 3 driver).  Creating</span>
-<span class="sd">    an engine does not open a connection; connections are pooled, checked</span>
-<span class="sd">    with pool_pre_ping so a restarted database does not break the web app,</span>
-<span class="sd">    and give up after a 10-second connect timeout.</span>
-<span class="sd">  * `SessionLocal` is a sessionmaker; use it as a context manager::</span>
+Engine and Session:
+  * `engine` is created once from the same environment settings psycopg uses
+    (db_config.get_sqlalchemy_url() selects the psycopg 3 driver).  Creating
+    an engine does not open a connection; connections are pooled, checked
+    with pool_pre_ping so a restarted database does not break the web app,
+    and give up after a 10-second connect timeout.
+  * `SessionLocal` is a sessionmaker; use it as a context manager::
 
-<span class="sd">        from models import Applicant, SessionLocal</span>
-<span class="sd">        with SessionLocal() as session:</span>
-<span class="sd">            first = session.get(Applicant, 1020481)</span>
-<span class="sd">"""</span>
+        from models import Applicant, SessionLocal
+        with SessionLocal() as session:
+            first = session.get(Applicant, 1020481)
+"""
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+from __future__ import annotations
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+from datetime import date
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Date</span><span class="p">,</span> <span class="n">Float</span><span class="p">,</span> <span class="n">Integer</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="n">create_engine</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.exc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArgumentError</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeclarativeBase</span><span class="p">,</span> <span class="n">Mapped</span><span class="p">,</span> <span class="n">mapped_column</span><span class="p">,</span> <span class="n">sessionmaker</span>
+from sqlalchemy import Date, Float, Integer, Text, create_engine
+from sqlalchemy.exc import ArgumentError
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">psycopg</span>
+import psycopg
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">db_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">CONNECT_TIMEOUT_SECONDS</span><span class="p">,</span> <span class="n">INVALID_SETTINGS_MESSAGE</span><span class="p">,</span> <span class="n">TABLE_NAME</span><span class="p">,</span> <span class="n">get_sqlalchemy_url</span>
+from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, get_sqlalchemy_url
 
 
 <div class="viewcode-block" id="Base">
 <a class="viewcode-back" href="../api/database.html#models.Base">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">Base</span><span class="p">(</span><span class="n">DeclarativeBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Declarative base class for this project's ORM models."""</span></div>
+class Base(DeclarativeBase):
+    """Declarative base class for this project's ORM models."""</div>
 
 
 
 <div class="viewcode-block" id="Applicant">
 <a class="viewcode-back" href="../api/database.html#models.Applicant">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">Applicant</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""One Grad Café admissions entry (a row of the applicants table)."""</span>
+class Applicant(Base):
+    """One Grad Café admissions entry (a row of the applicants table)."""
 
-    <span class="n">__tablename__</span> <span class="o">=</span> <span class="n">TABLE_NAME</span>
+    __tablename__ = TABLE_NAME
 
-    <span class="n">p_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">autoincrement</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">program</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">comments</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">date_added</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">date</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Date</span><span class="p">)</span>
-    <span class="n">url</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">status</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">term</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">us_or_international</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">gpa</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Float</span><span class="p">)</span>
-    <span class="n">gre</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Float</span><span class="p">)</span>
-    <span class="n">gre_v</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Float</span><span class="p">)</span>
-    <span class="n">gre_aw</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Float</span><span class="p">)</span>
-    <span class="n">degree</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">llm_generated_program</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">llm_generated_university</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
+    p_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    program: Mapped[str | None] = mapped_column(Text)
+    comments: Mapped[str | None] = mapped_column(Text)
+    date_added: Mapped[date | None] = mapped_column(Date)
+    url: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str | None] = mapped_column(Text)
+    term: Mapped[str | None] = mapped_column(Text)
+    us_or_international: Mapped[str | None] = mapped_column(Text)
+    gpa: Mapped[float | None] = mapped_column(Float)
+    gre: Mapped[float | None] = mapped_column(Float)
+    gre_v: Mapped[float | None] = mapped_column(Float)
+    gre_aw: Mapped[float | None] = mapped_column(Float)
+    degree: Mapped[str | None] = mapped_column(Text)
+    llm_generated_program: Mapped[str | None] = mapped_column(Text)
+    llm_generated_university: Mapped[str | None] = mapped_column(Text)
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"&lt;Applicant p_id=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">p_id</span><span class="si">}</span><span class="s2"> program=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">program</span><span class="si">!r}</span><span class="s2"> status=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">status</span><span class="si">!r}</span><span class="s2"> term=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">term</span><span class="si">!r}</span><span class="s2">&gt;"</span></div>
+    def __repr__(self) -&gt; str:
+        return f"&lt;Applicant p_id={self.p_id} program={self.program!r} status={self.status!r} term={self.term!r}&gt;"</div>
 
 
 
-<span class="c1"># connect_timeout makes an unreachable host fail after 10 s (the same limit the</span>
-<span class="c1"># psycopg scripts use) instead of waiting for the operating system's TCP timeout.</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span>
-        <span class="n">get_sqlalchemy_url</span><span class="p">(),</span>
-        <span class="n">pool_pre_ping</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">connect_args</span><span class="o">=</span><span class="p">{</span><span class="s2">"connect_timeout"</span><span class="p">:</span> <span class="n">CONNECT_TIMEOUT_SECONDS</span><span class="p">},</span>
-    <span class="p">)</span>
-<span class="k">except</span> <span class="p">(</span><span class="n">psycopg</span><span class="o">.</span><span class="n">ProgrammingError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="n">ArgumentError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-    <span class="c1"># Settings that cannot be parsed (bad escape, non-numeric port, ...): say so, never echo them.</span>
-    <span class="k">raise</span> <span class="ne">SystemExit</span><span class="p">(</span><span class="n">INVALID_SETTINGS_MESSAGE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
-<span class="n">SessionLocal</span> <span class="o">=</span> <span class="n">sessionmaker</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+# connect_timeout makes an unreachable host fail after 10 s (the same limit the
+# psycopg scripts use) instead of waiting for the operating system's TCP timeout.
+try:
+    engine = create_engine(
+        get_sqlalchemy_url(),
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+    )
+except (psycopg.ProgrammingError, ValueError, ArgumentError) as error:
+    # Settings that cannot be parsed (bad escape, non-numeric port, ...): say so, never echo them.
+    raise SystemExit(INVALID_SETTINGS_MESSAGE) from error
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 </pre></div>
 
            </div>

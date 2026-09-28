@@ -99,6 +99,7 @@ def _data_notes(conn: psycopg.Connection) -> str:
 
 
 def main() -> int:
+    """Command line: write query_results.html; returns 0, 2 (cannot connect) or 3 (query failed)."""
     try:
         conn = psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
     except psycopg.ProgrammingError:

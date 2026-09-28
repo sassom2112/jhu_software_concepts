@@ -12,6 +12,7 @@ Output: one dict per applicant with typed, consistently named fields.  Every
 Missing or unavailable values are always represented as None (JSON null).
 
 Usage::
+
     python clean.py                      # data/raw_entries.json[.gz] -> applicant_data.json
     python clean.py --input X --output Y
 """

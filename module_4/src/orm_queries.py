@@ -10,6 +10,7 @@ ranges and formatting come from analysis_common.py, the same definitions
 query_data.py uses, so equivalent questions give identical answers.
 
 Console usage::
+
     python orm_queries.py          # Questions 1, 4, 5, 8, 9 and original Question 10
     python orm_queries.py --all    # all eleven questions (what the Flask page shows)
 """
@@ -118,11 +119,13 @@ def _rounded_percent(part, whole):
 
 
 def q1_fall_2026_count(session: Session) -> int:
+    """Question 1: the number of Fall 2026 entries."""
     stmt = select(func.count()).select_from(Applicant).where(_is_term(rules.FALL_2026))
     return session.scalar(stmt) or 0
 
 
 def q2_percent_international(session: Session) -> tuple[int, int, Decimal | None]:
+    """Question 2: (international, classified, percent international) among entries with a nationality."""
     classified = func.count()
     international = func.count().filter(_normalized(Applicant.us_or_international) == rules.INTERNATIONAL)
     stmt = (
@@ -133,6 +136,7 @@ def q2_percent_international(session: Session) -> tuple[int, int, Decimal | None
 
 
 def q3_average_scores(session: Session) -> dict[str, tuple[Decimal | None, int]]:
+    """Question 3: {metric: (average on the official scale, number of values)} for GPA and the GRE scores."""
     gpa, quant, verbal, writing = _valid_gpa(), _valid_section_score(Applicant.gre), \
         _valid_section_score(Applicant.gre_v), _valid_writing_score()
     stmt = select(
@@ -146,6 +150,7 @@ def q3_average_scores(session: Session) -> dict[str, tuple[Decimal | None, int]]
 
 
 def q4_american_fall_2026_gpa(session: Session) -> tuple[Decimal | None, int]:
+    """Question 4: (average GPA, number of GPAs) of American Fall 2026 applicants."""
     stmt = select(_rounded_average(Applicant.gpa), func.count(Applicant.gpa)).where(
         and_(
             _is_term(rules.FALL_2026),
@@ -157,6 +162,7 @@ def q4_american_fall_2026_gpa(session: Session) -> tuple[Decimal | None, int]:
 
 
 def q5_fall_2025_acceptance(session: Session) -> tuple[int, int, Decimal | None]:
+    """Question 5: (accepted, all, acceptance percent) for Fall 2025 entries."""
     total = func.count()
     accepted = func.count().filter(_is_accepted())
     stmt = select(accepted, total, _rounded_percent(accepted, total)).where(_is_term(rules.FALL_2025))
@@ -164,6 +170,7 @@ def q5_fall_2025_acceptance(session: Session) -> tuple[int, int, Decimal | None]
 
 
 def q6_accepted_fall_2026_gpa(session: Session) -> tuple[Decimal | None, int]:
+    """Question 6: (average GPA, number of GPAs) of accepted Fall 2026 applicants."""
     stmt = select(_rounded_average(Applicant.gpa), func.count(Applicant.gpa)).where(
         and_(_is_term(rules.FALL_2026), _is_accepted(), _valid_gpa())
     )
@@ -171,6 +178,7 @@ def q6_accepted_fall_2026_gpa(session: Session) -> tuple[Decimal | None, int]:
 
 
 def q7_jhu_cs_masters(session: Session) -> int:
+    """Question 7: the number of Johns Hopkins Computer Science master's entries."""
     stmt = select(func.count()).select_from(Applicant).where(
         and_(
             Applicant.program.op("~*")(rules.JHU_REGEX),
@@ -186,6 +194,7 @@ def _q8_base_conditions():
 
 
 def q8_accepted_cs_phd_original(session: Session) -> int:
+    """Question 8: accepted Fall 2026 CS PhD entries at the four schools, from the original fields."""
     stmt = select(func.count()).select_from(Applicant).where(
         and_(_q8_base_conditions(), _mentions_computer_science(Applicant.program), _original_target_university())
     )
@@ -193,6 +202,7 @@ def q8_accepted_cs_phd_original(session: Session) -> int:
 
 
 def q9_accepted_cs_phd_llm(session: Session) -> tuple[int, int]:
+    """Question 9: (original-field count, LLM-field count) for the Question 8 selection."""
     original = func.count().filter(and_(_mentions_computer_science(Applicant.program), _original_target_university()))
     llm = func.count().filter(and_(_mentions_computer_science(Applicant.llm_generated_program), _llm_target_university()))
     stmt = select(original, llm).where(_q8_base_conditions())
@@ -200,6 +210,7 @@ def q9_accepted_cs_phd_llm(session: Session) -> tuple[int, int]:
 
 
 def q10_degree_comparison(session: Session) -> list[tuple]:
+    """Question 10: (degree, entries, acceptances, percent, average accepted GPA) per degree with 100+ Fall 2026 entries."""
     entries = func.count()
     acceptances = func.count().filter(_is_accepted())
     stmt = (
@@ -219,6 +230,7 @@ def q10_degree_comparison(session: Session) -> list[tuple]:
 
 
 def q11_top_universities(session: Session) -> list[tuple]:
+    """Question 11: (university, entries, acceptances, percent) for the ten LLM-named schools with the most Fall 2026 entries."""
     entries = func.count()
     acceptances = func.count().filter(_is_accepted())
     stmt = (
@@ -328,6 +340,7 @@ def _print(answers: list[OrmAnswer], title: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Console entry point: print the required ORM questions (all eleven with ``--all``); returns the exit code."""
     parser = argparse.ArgumentParser(description="Grad Café analysis with the SQLAlchemy ORM")
     parser.add_argument("--all", action="store_true", help="print all eleven questions")
     args = parser.parse_args(argv)

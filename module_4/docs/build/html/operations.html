@@ -9,6 +9,7 @@
   <title>Operational notes &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
@@ -190,9 +191,10 @@ seconds for a handful of new entries, and a few minutes for the full 50 pages.</
 <p>Pull Data cleans the new entries but does not run the Module 2 LLM
 standardizer, which needs its own environment (<code class="docutils literal notranslate"><span class="pre">llm_hosting/</span></code>) and a local
 model. New rows therefore have <code class="docutils literal notranslate"><span class="pre">NULL</span></code> in <code class="docutils literal notranslate"><span class="pre">llm_generated_program</span></code> and
-<code class="docutils literal notranslate"><span class="pre">llm_generated_university</span></code>. Questions 9 and 11 are the only ones that use
-those columns, and they leave such rows out until the standardizer has been
-run over them.</p>
+<code class="docutils literal notranslate"><span class="pre">llm_generated_university</span></code>. Question 11 and the LLM-field count of Question 9
+are the only results that use those columns. They leave such rows out until
+the standardizer has been run over them. Question 9’s original-field count
+does include them.</p>
 </section>
 <section id="secrets-and-configuration">
 <h2>Secrets and configuration<a class="headerlink" href="#secrets-and-configuration" title="Link to this heading"></a></h2>

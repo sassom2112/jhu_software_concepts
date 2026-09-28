@@ -9,6 +9,7 @@
   <title>Architecture &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
@@ -106,7 +107,8 @@ layer below it:</p>
 |  load_data.py -&gt; INSERT ...        |   |  analysis_common.py (rules,     |
 |     ON CONFLICT (p_id) DO NOTHING  |   |    wording, 2-decimal format)   |
 +----------------+-------------------+   +----------------+----------------+
-                 | psycopg 3                              | SQLAlchemy 2
+                 | psycopg 3                              | SQLAlchemy 2 (ORM),
+                 |                                        | psycopg 3 (query_data)
                  v                                        v
 +-- Database layer --------------------------------------------------------+
 |  PostgreSQL table "applicants" (p_id INTEGER PRIMARY KEY, ...)          |

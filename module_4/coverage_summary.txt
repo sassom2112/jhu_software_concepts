@@ -23,4 +23,4 @@ module_4/src/webapp/services.py          37      0   100%
 -------------------------------------------------------------------
 TOTAL                                  1478      0   100%
 Required test coverage of 100% reached. Total coverage: 100.00%
-260 passed in 2.12s
+260 passed in 2.10s

@@ -14,6 +14,7 @@ htmlcov/
 
 # Sphinx build output (we commit docs/build/html as the deliverable later; intermediates are ignored)
 docs/build/doctrees/
+docs/build/html/.doctrees/
 
 # runtime data (same as module_2/module_3)
 data/raw_html/

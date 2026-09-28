@@ -9,6 +9,7 @@
   <title>Overview and setup &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
@@ -115,7 +116,8 @@ already running.</p></li>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>Python 3.11 (3.10 or newer works). The CI runs 3.11.</p></li>
+<li><p>Python 3.11. The application and the tests also run on 3.10; building
+the documentation (Sphinx 8) needs 3.11 or newer. The CI runs 3.11.</p></li>
 <li><p>PostgreSQL 13 or newer. Development used PostgreSQL 17 in Docker.</p></li>
 <li><p>Linux, macOS or WSL. The commands below use a POSIX shell.</p></li>
 </ul>
@@ -152,7 +154,7 @@ listens on <code class="docutils literal notranslate"><span class="pre">localhos
 <p>No password or connection string is stored in the repository. Every program,
 whether psycopg or SQLAlchemy, reads the connection from the environment
 through <code class="docutils literal notranslate"><span class="pre">db_config.get_database_url()</span></code>. The table below lists every variable
-the code reads. <code class="docutils literal notranslate"><span class="pre">.env.example</span></code> in the module folder shows the same names.</p>
+the code reads. <code class="docutils literal notranslate"><span class="pre">.env.example</span></code> in the module folder lists them, ready to <code class="docutils literal notranslate"><span class="pre">source</span></code>.</p>
 <table class="docutils align-default">
 <colgroup>
 <col style="width: 22.0%" />

@@ -6,7 +6,7 @@
 
 | | |
 | --- | --- |
-| Documentation (Read the Docs) | https://jhu-software-concepts.readthedocs.io/en/latest/ |
+| Documentation (Read the Docs) | https://sassom2112-jhu-software-concepts.readthedocs.io/en/latest/ |
 | Continuous integration | [`.github/workflows/tests.yml`](../.github/workflows/tests.yml) · proof: [`actions_success.png`](actions_success.png) |
 | Coverage proof | [`coverage_summary.txt`](coverage_summary.txt): 100% of `module_4/src` |
 | Repository (SSH) | `git@github.com:sassom2112/jhu_software_concepts.git` (also in `github.txt`) |
@@ -15,7 +15,7 @@ Module 4 puts the Module 3 Grad Café application under test and documents it:
 
 * a **pytest suite** of 260 tests with **100% line coverage** of `module_4/src`. Every test is marked,
   none touches the internet, none sleeps, and the database tests use a separate `*_test` database;
-* a **GitHub Actions** workflow that starts PostgreSQL and runs the suite on every push;
+* a **GitHub Actions** workflow that starts PostgreSQL and runs the suite on every push that changes `module_4/`;
 * **Sphinx documentation** (setup, architecture, API reference, testing guide, operational
   notes, troubleshooting), published on Read the Docs.
 
@@ -53,7 +53,7 @@ module_4/
 
 ## 2. Setup
 
-Python 3.11 (3.10+ works) and PostgreSQL 13+ (developed on PostgreSQL 17 in Docker).
+Python 3.11 (the application and tests also run on 3.10; building the docs needs 3.11) and PostgreSQL 13+ (developed on PostgreSQL 17 in Docker).
 
 ```bash
 cd module_4
@@ -143,7 +143,7 @@ How the tests stay fast and deterministic:
   a time, in throwaway copies. Every change had to make a test fail; the weak tests found this way were
   strengthened.
 
-The [testing guide](https://jhu-software-concepts.readthedocs.io/en/latest/testing.html) lists every marker,
+The [testing guide](https://sassom2112-jhu-software-concepts.readthedocs.io/en/latest/testing.html) lists every marker,
 fixture and test double.
 
 ## 5. GitHub Actions
@@ -151,7 +151,7 @@ fixture and test double.
 GitHub only runs workflows stored at the repository root, so the workflow that runs is
 [`/.github/workflows/tests.yml`](../.github/workflows/tests.yml). `module_4/.github/workflows/tests.yml`
 is an identical copy kept with the assignment, and CI fails if the two ever differ. On every push that
-touches `module_4/` the workflow:
+changes `module_4/` (or the workflow, or `.readthedocs.yaml`) the workflow:
 
 1. starts a `postgres:17` service with a `gradcafe_test` database (`trust` authentication inside the
    throwaway container, so no password exists anywhere);
@@ -166,7 +166,7 @@ touches `module_4/` the workflow:
 
 Sphinx sources are in `docs/source`, and the generated HTML is committed in `docs/build/html`
 (open `docs/build/html/index.html`). The published copy is on Read the Docs:
-**https://jhu-software-concepts.readthedocs.io/en/latest/**. It is built from `.readthedocs.yaml` at the
+**https://sassom2112-jhu-software-concepts.readthedocs.io/en/latest/**. It is built from `.readthedocs.yaml` at the
 repository root, with warnings treated as errors.
 
 | Page | Contents |
@@ -200,9 +200,10 @@ sphinx-build -W -b html docs/source docs/build/html
   * `build_query_results.py` crashed on an empty database;
   * the scraper fetched the first page twice when a "Next" link pointed back at it (the start URL was not
     normalized);
-  * `scrape.py main()` left `scrape.log` open;
-  * Pull Data's result message vanished in an immediate reload;
-  * unreachable code in `scrape_new_entries` was removed.
+  * `scrape.py main()` left `scrape.log` open.
+* **Other fixes:** Pull Data's result message no longer vanishes in an immediate reload (template JavaScript);
+  unreachable code in `scrape_new_entries` was removed (found while reaching 100% coverage); the command-line
+  tools find their data files in `module_4/` again after the move into `src/`.
 * **Unchanged:** the `applicants` schema and its required fields, the eleven questions and their answers,
   and the scraper's politeness rules.
 
@@ -211,6 +212,6 @@ sphinx-build -W -b html docs/source docs/build/html
 * The busy flag belongs to one Python process, which is right for `run.py`. A multi-worker server would
   need a shared lock (for example a PostgreSQL advisory lock).
 * Rows added by Pull Data have empty LLM columns until the optional `llm_hosting` standardizer is run, so
-  Questions 9 and 11 do not count them yet.
+  Question 11 and the LLM-field count of Question 9 do not include them yet.
 * A Pull Data click waits for the scrape to finish: seconds normally, a few minutes for the 50-page maximum.
 * The data are self-reported Grad Café submissions (see `limitations.pdf`).

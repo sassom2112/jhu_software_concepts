@@ -33,6 +33,7 @@ class PullState:
 
     @property
     def is_running(self) -> bool:
+        """True while a pull is in progress."""
         return self._running
 
     def try_start(self) -> bool:

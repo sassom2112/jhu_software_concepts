@@ -76,10 +76,14 @@ def test_update_analysis_returns_200_when_not_busy(client):
 
 
 @pytest.mark.buttons
-def test_update_analysis_returns_409_when_a_pull_is_running(app, client):
+def test_update_analysis_returns_409_when_a_pull_is_running(fake_scraper, fake_loader):
+    queries = []
+    app = create_app(scrape_fn=fake_scraper, load_fn=fake_loader, query_fn=lambda: queries.append("run") or {})
     app.pull_state.try_start()
 
-    response = client.post("/update-analysis")
+    response = app.test_client().post("/update-analysis")
 
     assert response.status_code == 409
     assert response.get_json() == {"busy": True}
+    assert (queries, fake_scraper.calls, fake_loader.calls) == ([], 0, [])   # no update of any kind was performed
+    assert app.pull_state.is_running                                        # and the running pull was left alone

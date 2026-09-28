@@ -8,6 +8,7 @@
   <title>orm_queries &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -77,367 +78,416 @@
            <div itemprop="articleBody">
              
   <h1>Source code for orm_queries</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""</span>
-<span class="sd">orm_queries.py - Answer the Module 3 questions with the SQLAlchemy ORM.</span>
+<span></span>"""
+orm_queries.py - Answer the Module 3 questions with the SQLAlchemy ORM.
 
-<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 3.</span>
+JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 
-<span class="sd">Every query here is built from the Applicant model with select(), where(),</span>
-<span class="sd">func.count(), func.avg(), and_() / or_() and a Session.  No handwritten SQL</span>
-<span class="sd">strings and no database-driver calls appear in this file.  The matching rules, valid score</span>
-<span class="sd">ranges and formatting come from analysis_common.py, the same definitions</span>
-<span class="sd">query_data.py uses, so equivalent questions give identical answers.</span>
+Every query here is built from the Applicant model with select(), where(),
+func.count(), func.avg(), and_() / or_() and a Session.  No handwritten SQL
+strings and no database-driver calls appear in this file.  The matching rules, valid score
+ranges and formatting come from analysis_common.py, the same definitions
+query_data.py uses, so equivalent questions give identical answers.
 
-<span class="sd">Console usage::</span>
-<span class="sd">    python orm_queries.py          # Questions 1, 4, 5, 8, 9 and original Question 10</span>
-<span class="sd">    python orm_queries.py --all    # all eleven questions (what the Flask page shows)</span>
-<span class="sd">"""</span>
+Console usage::
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+    python orm_queries.py          # Questions 1, 4, 5, 8, 9 and original Question 10
+    python orm_queries.py --all    # all eleven questions (what the Flask page shows)
+"""
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
+from __future__ import annotations
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Numeric</span><span class="p">,</span> <span class="n">and_</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">literal</span><span class="p">,</span> <span class="n">or_</span><span class="p">,</span> <span class="n">select</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.exc</span><span class="w"> </span><span class="kn">import</span> <span class="n">OperationalError</span><span class="p">,</span> <span class="n">SQLAlchemyError</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span>
+import argparse
+import sys
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">analysis_common</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rules</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">analysis_common</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">QUESTIONS</span><span class="p">,</span> <span class="n">format_average</span><span class="p">,</span> <span class="n">format_count</span><span class="p">,</span> <span class="n">format_difference</span><span class="p">,</span> <span class="n">format_percent</span><span class="p">,</span>
-                             <span class="n">format_table</span><span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">db_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">describe_target</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Applicant</span><span class="p">,</span> <span class="n">SessionLocal</span>
+from sqlalchemy import Numeric, and_, cast, func, literal, or_, select
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
-<span class="n">REQUIRED_ORM_QUESTIONS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"1"</span><span class="p">,</span> <span class="s2">"4"</span><span class="p">,</span> <span class="s2">"5"</span><span class="p">,</span> <span class="s2">"8"</span><span class="p">,</span> <span class="s2">"9"</span><span class="p">,</span> <span class="s2">"10"</span><span class="p">)</span>
+import analysis_common as rules
+from analysis_common import (QUESTIONS, format_average, format_count, format_difference, format_percent,
+                             format_table)
+from db_config import describe_target
+from models import Applicant, SessionLocal
+
+REQUIRED_ORM_QUESTIONS = ("1", "4", "5", "8", "9", "10")
 
 
 <div class="viewcode-block" id="OrmAnswer">
 <a class="viewcode-back" href="../api/database.html#orm_queries.OrmAnswer">[docs]</a>
-<span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">OrmAnswer</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""One analysis result computed through the ORM."""</span>
+@dataclass
+class OrmAnswer:
+    """One analysis result computed through the ORM."""
 
-    <span class="n">number</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">question</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">lines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
-    <span class="n">columns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
-    <span class="n">table</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span></div>
-
-
-
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                         Reusable column expressions                         #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+    number: str
+    question: str
+    lines: list[tuple[str, str]] = field(default_factory=list)
+    columns: list[str] = field(default_factory=list)
+    table: list[list[str]] = field(default_factory=list)</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_normalized</span><span class="p">(</span><span class="n">column</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""LOWER(TRIM(column)) for case- and space-insensitive comparisons."""</span>
-    <span class="k">return</span> <span class="n">func</span><span class="o">.</span><span class="n">lower</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">trim</span><span class="p">(</span><span class="n">column</span><span class="p">))</span>
+
+# --------------------------------------------------------------------------- #
+#                         Reusable column expressions                         #
+# --------------------------------------------------------------------------- #
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_is_term</span><span class="p">(</span><span class="n">term</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">_normalized</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">term</span><span class="p">)</span> <span class="o">==</span> <span class="n">term</span>
+def _normalized(column):
+    """LOWER(TRIM(column)) for case- and space-insensitive comparisons."""
+    return func.lower(func.trim(column))
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_is_accepted</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">func</span><span class="o">.</span><span class="n">trim</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">status</span><span class="p">)</span><span class="o">.</span><span class="n">ilike</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">ACCEPTED_PATTERN</span><span class="p">)</span>
+def _is_term(term: str):
+    return _normalized(Applicant.term) == term
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_is_phd</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">degree</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">"~*"</span><span class="p">)(</span><span class="n">rules</span><span class="o">.</span><span class="n">PHD_REGEX</span><span class="p">)</span>
+def _is_accepted():
+    return func.trim(Applicant.status).ilike(rules.ACCEPTED_PATTERN)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_is_masters</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">degree</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">"~*"</span><span class="p">)(</span><span class="n">rules</span><span class="o">.</span><span class="n">MASTERS_REGEX</span><span class="p">)</span>
+def _is_phd():
+    return Applicant.degree.op("~*")(rules.PHD_REGEX)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_mentions_computer_science</span><span class="p">(</span><span class="n">column</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">column</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">"~*"</span><span class="p">)(</span><span class="n">rules</span><span class="o">.</span><span class="n">COMPUTER_SCIENCE_REGEX</span><span class="p">)</span>
+def _is_masters():
+    return Applicant.degree.op("~*")(rules.MASTERS_REGEX)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_original_target_university</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">"""One of the four Question 8 universities, recognized in the original program text."""</span>
-    <span class="n">patterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">Applicant</span><span class="o">.</span><span class="n">program</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">"~*"</span><span class="p">)(</span><span class="n">regex</span><span class="p">)</span> <span class="k">for</span> <span class="n">regex</span> <span class="ow">in</span> <span class="n">rules</span><span class="o">.</span><span class="n">ORIGINAL_UNIVERSITY_REGEXES</span><span class="p">]</span>
-    <span class="n">patterns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">program</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">"~"</span><span class="p">)(</span><span class="n">rules</span><span class="o">.</span><span class="n">MIT_ACRONYM_REGEX</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">or_</span><span class="p">(</span><span class="o">*</span><span class="n">patterns</span><span class="p">)</span>
+def _mentions_computer_science(column):
+    return column.op("~*")(rules.COMPUTER_SCIENCE_REGEX)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_llm_target_university</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">_normalized</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_university</span><span class="p">)</span><span class="o">.</span><span class="n">in_</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">LLM_TARGET_UNIVERSITIES</span><span class="p">)</span>
+def _original_target_university():
+    """One of the four Question 8 universities, recognized in the original program text."""
+    patterns = [Applicant.program.op("~*")(regex) for regex in rules.ORIGINAL_UNIVERSITY_REGEXES]
+    patterns.append(Applicant.program.op("~")(rules.MIT_ACRONYM_REGEX))
+    return or_(*patterns)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_valid_gpa</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">and_</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span> <span class="o">&gt;</span> <span class="n">rules</span><span class="o">.</span><span class="n">GPA_MIN_EXCLUSIVE</span><span class="p">,</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span> <span class="o">&lt;=</span> <span class="n">rules</span><span class="o">.</span><span class="n">GPA_MAX</span><span class="p">)</span>
+def _llm_target_university():
+    return _normalized(Applicant.llm_generated_university).in_(rules.LLM_TARGET_UNIVERSITIES)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_valid_section_score</span><span class="p">(</span><span class="n">column</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">column</span><span class="o">.</span><span class="n">between</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">GRE_SECTION_MIN</span><span class="p">,</span> <span class="n">rules</span><span class="o">.</span><span class="n">GRE_SECTION_MAX</span><span class="p">)</span>
+def _valid_gpa():
+    return and_(Applicant.gpa &gt; rules.GPA_MIN_EXCLUSIVE, Applicant.gpa &lt;= rules.GPA_MAX)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_valid_writing_score</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">gre_aw</span><span class="o">.</span><span class="n">between</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">GRE_AW_MIN</span><span class="p">,</span> <span class="n">rules</span><span class="o">.</span><span class="n">GRE_AW_MAX</span><span class="p">)</span>
+def _valid_section_score(column):
+    return column.between(rules.GRE_SECTION_MIN, rules.GRE_SECTION_MAX)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_rounded_average</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">condition</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""ROUND(AVG(column)::numeric, 2), optionally with FILTER (WHERE condition)."""</span>
-    <span class="n">average</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">avg</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">condition</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">average</span> <span class="o">=</span> <span class="n">average</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">condition</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">func</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">average</span><span class="p">,</span> <span class="n">Numeric</span><span class="p">),</span> <span class="mi">2</span><span class="p">)</span>
+def _valid_writing_score():
+    return Applicant.gre_aw.between(rules.GRE_AW_MIN, rules.GRE_AW_MAX)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_rounded_percent</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="n">whole</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""ROUND(100.0 * part / NULLIF(whole, 0), 2) with numeric (not floating point) arithmetic."""</span>
-    <span class="k">return</span> <span class="n">func</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">literal</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">"100.0"</span><span class="p">),</span> <span class="n">Numeric</span><span class="p">)</span> <span class="o">*</span> <span class="n">part</span> <span class="o">/</span> <span class="n">func</span><span class="o">.</span><span class="n">nullif</span><span class="p">(</span><span class="n">whole</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span><span class="p">)</span>
+def _rounded_average(column, condition=None):
+    """ROUND(AVG(column)::numeric, 2), optionally with FILTER (WHERE condition)."""
+    average = func.avg(column)
+    if condition is not None:
+        average = average.filter(condition)
+    return func.round(cast(average, Numeric), 2)
 
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                                  Questions                                  #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+def _rounded_percent(part, whole):
+    """ROUND(100.0 * part / NULLIF(whole, 0), 2) with numeric (not floating point) arithmetic."""
+    return func.round(literal(Decimal("100.0"), Numeric) * part / func.nullif(whole, 0), 2)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q1_fall_2026_count</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">())</span><span class="o">.</span><span class="n">select_from</span><span class="p">(</span><span class="n">Applicant</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2026</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span>
+# --------------------------------------------------------------------------- #
+#                                  Questions                                  #
+# --------------------------------------------------------------------------- #
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q2_percent_international</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">Decimal</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-    <span class="n">classified</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
-    <span class="n">international</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">_normalized</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">us_or_international</span><span class="p">)</span> <span class="o">==</span> <span class="n">rules</span><span class="o">.</span><span class="n">INTERNATIONAL</span><span class="p">)</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">select</span><span class="p">(</span><span class="n">international</span><span class="p">,</span> <span class="n">classified</span><span class="p">,</span> <span class="n">_rounded_percent</span><span class="p">(</span><span class="n">international</span><span class="p">,</span> <span class="n">classified</span><span class="p">))</span>
-        <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">_normalized</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">us_or_international</span><span class="p">)</span><span class="o">.</span><span class="n">in_</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">NATIONALITY_CLASSES</span><span class="p">))</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">())</span>
+<div class="viewcode-block" id="q1_fall_2026_count">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q1_fall_2026_count">[docs]</a>
+def q1_fall_2026_count(session: Session) -&gt; int:
+    """Question 1: the number of Fall 2026 entries."""
+    stmt = select(func.count()).select_from(Applicant).where(_is_term(rules.FALL_2026))
+    return session.scalar(stmt) or 0</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q3_average_scores</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Decimal</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
-    <span class="n">gpa</span><span class="p">,</span> <span class="n">quant</span><span class="p">,</span> <span class="n">verbal</span><span class="p">,</span> <span class="n">writing</span> <span class="o">=</span> <span class="n">_valid_gpa</span><span class="p">(),</span> <span class="n">_valid_section_score</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre</span><span class="p">),</span> \
-        <span class="n">_valid_section_score</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre_v</span><span class="p">),</span> <span class="n">_valid_writing_score</span><span class="p">()</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span>
-        <span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">,</span> <span class="n">gpa</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">gpa</span><span class="p">),</span>
-        <span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre</span><span class="p">,</span> <span class="n">quant</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">quant</span><span class="p">),</span>
-        <span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre_v</span><span class="p">,</span> <span class="n">verbal</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre_v</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">verbal</span><span class="p">),</span>
-        <span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre_aw</span><span class="p">,</span> <span class="n">writing</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gre_aw</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">writing</span><span class="p">),</span>
-    <span class="p">)</span>
-    <span class="n">r</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">()</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">"gpa"</span><span class="p">:</span> <span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="s2">"gre"</span><span class="p">:</span> <span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span> <span class="s2">"gre_v"</span><span class="p">:</span> <span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="mi">5</span><span class="p">]),</span> <span class="s2">"gre_aw"</span><span class="p">:</span> <span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="mi">7</span><span class="p">])}</span>
+
+<div class="viewcode-block" id="q2_percent_international">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q2_percent_international">[docs]</a>
+def q2_percent_international(session: Session) -&gt; tuple[int, int, Decimal | None]:
+    """Question 2: (international, classified, percent international) among entries with a nationality."""
+    classified = func.count()
+    international = func.count().filter(_normalized(Applicant.us_or_international) == rules.INTERNATIONAL)
+    stmt = (
+        select(international, classified, _rounded_percent(international, classified))
+        .where(_normalized(Applicant.us_or_international).in_(rules.NATIONALITY_CLASSES))
+    )
+    return tuple(session.execute(stmt).one())</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q4_american_fall_2026_gpa</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Decimal</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">))</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-        <span class="n">and_</span><span class="p">(</span>
-            <span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2026</span><span class="p">),</span>
-            <span class="n">_normalized</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">us_or_international</span><span class="p">)</span> <span class="o">==</span> <span class="n">rules</span><span class="o">.</span><span class="n">AMERICAN</span><span class="p">,</span>
-            <span class="n">_valid_gpa</span><span class="p">(),</span>
-        <span class="p">)</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">())</span>
+
+<div class="viewcode-block" id="q3_average_scores">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q3_average_scores">[docs]</a>
+def q3_average_scores(session: Session) -&gt; dict[str, tuple[Decimal | None, int]]:
+    """Question 3: {metric: (average on the official scale, number of values)} for GPA and the GRE scores."""
+    gpa, quant, verbal, writing = _valid_gpa(), _valid_section_score(Applicant.gre), \
+        _valid_section_score(Applicant.gre_v), _valid_writing_score()
+    stmt = select(
+        _rounded_average(Applicant.gpa, gpa), func.count(Applicant.gpa).filter(gpa),
+        _rounded_average(Applicant.gre, quant), func.count(Applicant.gre).filter(quant),
+        _rounded_average(Applicant.gre_v, verbal), func.count(Applicant.gre_v).filter(verbal),
+        _rounded_average(Applicant.gre_aw, writing), func.count(Applicant.gre_aw).filter(writing),
+    )
+    r = session.execute(stmt).one()
+    return {"gpa": (r[0], r[1]), "gre": (r[2], r[3]), "gre_v": (r[4], r[5]), "gre_aw": (r[6], r[7])}</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q5_fall_2025_acceptance</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">Decimal</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-    <span class="n">total</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
-    <span class="n">accepted</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">_is_accepted</span><span class="p">())</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">_rounded_percent</span><span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="n">total</span><span class="p">))</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2025</span><span class="p">))</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">())</span>
+
+<div class="viewcode-block" id="q4_american_fall_2026_gpa">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q4_american_fall_2026_gpa">[docs]</a>
+def q4_american_fall_2026_gpa(session: Session) -&gt; tuple[Decimal | None, int]:
+    """Question 4: (average GPA, number of GPAs) of American Fall 2026 applicants."""
+    stmt = select(_rounded_average(Applicant.gpa), func.count(Applicant.gpa)).where(
+        and_(
+            _is_term(rules.FALL_2026),
+            _normalized(Applicant.us_or_international) == rules.AMERICAN,
+            _valid_gpa(),
+        )
+    )
+    return tuple(session.execute(stmt).one())</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q6_accepted_fall_2026_gpa</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Decimal</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">))</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-        <span class="n">and_</span><span class="p">(</span><span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2026</span><span class="p">),</span> <span class="n">_is_accepted</span><span class="p">(),</span> <span class="n">_valid_gpa</span><span class="p">())</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">())</span>
+
+<div class="viewcode-block" id="q5_fall_2025_acceptance">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q5_fall_2025_acceptance">[docs]</a>
+def q5_fall_2025_acceptance(session: Session) -&gt; tuple[int, int, Decimal | None]:
+    """Question 5: (accepted, all, acceptance percent) for Fall 2025 entries."""
+    total = func.count()
+    accepted = func.count().filter(_is_accepted())
+    stmt = select(accepted, total, _rounded_percent(accepted, total)).where(_is_term(rules.FALL_2025))
+    return tuple(session.execute(stmt).one())</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q7_jhu_cs_masters</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">())</span><span class="o">.</span><span class="n">select_from</span><span class="p">(</span><span class="n">Applicant</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-        <span class="n">and_</span><span class="p">(</span>
-            <span class="n">Applicant</span><span class="o">.</span><span class="n">program</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">"~*"</span><span class="p">)(</span><span class="n">rules</span><span class="o">.</span><span class="n">JHU_REGEX</span><span class="p">),</span>
-            <span class="n">_mentions_computer_science</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">program</span><span class="p">),</span>
-            <span class="n">_is_masters</span><span class="p">(),</span>
-        <span class="p">)</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="q6_accepted_fall_2026_gpa">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q6_accepted_fall_2026_gpa">[docs]</a>
+def q6_accepted_fall_2026_gpa(session: Session) -&gt; tuple[Decimal | None, int]:
+    """Question 6: (average GPA, number of GPAs) of accepted Fall 2026 applicants."""
+    stmt = select(_rounded_average(Applicant.gpa), func.count(Applicant.gpa)).where(
+        and_(_is_term(rules.FALL_2026), _is_accepted(), _valid_gpa())
+    )
+    return tuple(session.execute(stmt).one())</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_q8_base_conditions</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">and_</span><span class="p">(</span><span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2026</span><span class="p">),</span> <span class="n">_is_accepted</span><span class="p">(),</span> <span class="n">_is_phd</span><span class="p">())</span>
+
+<div class="viewcode-block" id="q7_jhu_cs_masters">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q7_jhu_cs_masters">[docs]</a>
+def q7_jhu_cs_masters(session: Session) -&gt; int:
+    """Question 7: the number of Johns Hopkins Computer Science master's entries."""
+    stmt = select(func.count()).select_from(Applicant).where(
+        and_(
+            Applicant.program.op("~*")(rules.JHU_REGEX),
+            _mentions_computer_science(Applicant.program),
+            _is_masters(),
+        )
+    )
+    return session.scalar(stmt) or 0</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q8_accepted_cs_phd_original</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">())</span><span class="o">.</span><span class="n">select_from</span><span class="p">(</span><span class="n">Applicant</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-        <span class="n">and_</span><span class="p">(</span><span class="n">_q8_base_conditions</span><span class="p">(),</span> <span class="n">_mentions_computer_science</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">program</span><span class="p">),</span> <span class="n">_original_target_university</span><span class="p">())</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span>
+
+def _q8_base_conditions():
+    return and_(_is_term(rules.FALL_2026), _is_accepted(), _is_phd())
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q9_accepted_cs_phd_llm</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-    <span class="n">original</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">and_</span><span class="p">(</span><span class="n">_mentions_computer_science</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">program</span><span class="p">),</span> <span class="n">_original_target_university</span><span class="p">()))</span>
-    <span class="n">llm</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">and_</span><span class="p">(</span><span class="n">_mentions_computer_science</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_program</span><span class="p">),</span> <span class="n">_llm_target_university</span><span class="p">()))</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">llm</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">_q8_base_conditions</span><span class="p">())</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">())</span>
+<div class="viewcode-block" id="q8_accepted_cs_phd_original">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q8_accepted_cs_phd_original">[docs]</a>
+def q8_accepted_cs_phd_original(session: Session) -&gt; int:
+    """Question 8: accepted Fall 2026 CS PhD entries at the four schools, from the original fields."""
+    stmt = select(func.count()).select_from(Applicant).where(
+        and_(_q8_base_conditions(), _mentions_computer_science(Applicant.program), _original_target_university())
+    )
+    return session.scalar(stmt) or 0</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q10_degree_comparison</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
-    <span class="n">entries</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
-    <span class="n">acceptances</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">_is_accepted</span><span class="p">())</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">select</span><span class="p">(</span>
-            <span class="n">Applicant</span><span class="o">.</span><span class="n">degree</span><span class="p">,</span>
-            <span class="n">entries</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"entries"</span><span class="p">),</span>
-            <span class="n">acceptances</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"acceptances"</span><span class="p">),</span>
-            <span class="n">_rounded_percent</span><span class="p">(</span><span class="n">acceptances</span><span class="p">,</span> <span class="n">entries</span><span class="p">)</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"acceptance_percent"</span><span class="p">),</span>
-            <span class="n">_rounded_average</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">gpa</span><span class="p">,</span> <span class="n">and_</span><span class="p">(</span><span class="n">_is_accepted</span><span class="p">(),</span> <span class="n">_valid_gpa</span><span class="p">()))</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"avg_accepted_gpa"</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2026</span><span class="p">),</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">degree</span><span class="o">.</span><span class="n">is_not</span><span class="p">(</span><span class="kc">None</span><span class="p">))</span>
-        <span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">degree</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">having</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="n">rules</span><span class="o">.</span><span class="n">MIN_ENTRIES_PER_DEGREE</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">desc</span><span class="p">(),</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">degree</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()]</span>
+
+<div class="viewcode-block" id="q9_accepted_cs_phd_llm">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q9_accepted_cs_phd_llm">[docs]</a>
+def q9_accepted_cs_phd_llm(session: Session) -&gt; tuple[int, int]:
+    """Question 9: (original-field count, LLM-field count) for the Question 8 selection."""
+    original = func.count().filter(and_(_mentions_computer_science(Applicant.program), _original_target_university()))
+    llm = func.count().filter(and_(_mentions_computer_science(Applicant.llm_generated_program), _llm_target_university()))
+    stmt = select(original, llm).where(_q8_base_conditions())
+    return tuple(session.execute(stmt).one())</div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">q11_top_universities</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
-    <span class="n">entries</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
-    <span class="n">acceptances</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">_is_accepted</span><span class="p">())</span>
-    <span class="n">stmt</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">select</span><span class="p">(</span>
-            <span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_university</span><span class="p">,</span>
-            <span class="n">entries</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"entries"</span><span class="p">),</span>
-            <span class="n">acceptances</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"acceptances"</span><span class="p">),</span>
-            <span class="n">_rounded_percent</span><span class="p">(</span><span class="n">acceptances</span><span class="p">,</span> <span class="n">entries</span><span class="p">)</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"acceptance_percent"</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="o">.</span><span class="n">where</span><span class="p">(</span>
-            <span class="n">_is_term</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">FALL_2026</span><span class="p">),</span>
-            <span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_university</span><span class="o">.</span><span class="n">is_not</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span>
-            <span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_university</span> <span class="o">!=</span> <span class="s2">"Unknown"</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_university</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">desc</span><span class="p">(),</span> <span class="n">Applicant</span><span class="o">.</span><span class="n">llm_generated_university</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">TOP_UNIVERSITY_COUNT</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()]</span>
+
+<div class="viewcode-block" id="q10_degree_comparison">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q10_degree_comparison">[docs]</a>
+def q10_degree_comparison(session: Session) -&gt; list[tuple]:
+    """Question 10: (degree, entries, acceptances, percent, average accepted GPA) per degree with 100+ Fall 2026 entries."""
+    entries = func.count()
+    acceptances = func.count().filter(_is_accepted())
+    stmt = (
+        select(
+            Applicant.degree,
+            entries.label("entries"),
+            acceptances.label("acceptances"),
+            _rounded_percent(acceptances, entries).label("acceptance_percent"),
+            _rounded_average(Applicant.gpa, and_(_is_accepted(), _valid_gpa())).label("avg_accepted_gpa"),
+        )
+        .where(_is_term(rules.FALL_2026), Applicant.degree.is_not(None))
+        .group_by(Applicant.degree)
+        .having(func.count() &gt;= rules.MIN_ENTRIES_PER_DEGREE)
+        .order_by(func.count().desc(), Applicant.degree)
+    )
+    return [tuple(row) for row in session.execute(stmt).all()]</div>
+
+
+
+<div class="viewcode-block" id="q11_top_universities">
+<a class="viewcode-back" href="../api/database.html#orm_queries.q11_top_universities">[docs]</a>
+def q11_top_universities(session: Session) -&gt; list[tuple]:
+    """Question 11: (university, entries, acceptances, percent) for the ten LLM-named schools with the most Fall 2026 entries."""
+    entries = func.count()
+    acceptances = func.count().filter(_is_accepted())
+    stmt = (
+        select(
+            Applicant.llm_generated_university,
+            entries.label("entries"),
+            acceptances.label("acceptances"),
+            _rounded_percent(acceptances, entries).label("acceptance_percent"),
+        )
+        .where(
+            _is_term(rules.FALL_2026),
+            Applicant.llm_generated_university.is_not(None),
+            Applicant.llm_generated_university != "Unknown",
+        )
+        .group_by(Applicant.llm_generated_university)
+        .order_by(func.count().desc(), Applicant.llm_generated_university)
+        .limit(rules.TOP_UNIVERSITY_COUNT)
+    )
+    return [tuple(row) for row in session.execute(stmt).all()]</div>
+
 
 
 <div class="viewcode-block" id="database_summary">
 <a class="viewcode-back" href="../api/database.html#orm_queries.database_summary">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">database_summary</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Row count and newest entry date, shown at the top of the web page."""</span>
-    <span class="n">total</span><span class="p">,</span> <span class="n">newest</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">(),</span> <span class="n">func</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">Applicant</span><span class="o">.</span><span class="n">date_added</span><span class="p">)))</span><span class="o">.</span><span class="n">one</span><span class="p">()</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">"total_entries"</span><span class="p">:</span> <span class="n">total</span><span class="p">,</span> <span class="s2">"newest_entry"</span><span class="p">:</span> <span class="n">newest</span><span class="p">}</span></div>
+def database_summary(session: Session) -&gt; dict:
+    """Row count and newest entry date, shown at the top of the web page."""
+    total, newest = session.execute(select(func.count(), func.max(Applicant.date_added))).one()
+    return {"total_entries": total, "newest_entry": newest}</div>
 
 
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                         Answers ready for display                           #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+# --------------------------------------------------------------------------- #
+#                         Answers ready for display                           #
+# --------------------------------------------------------------------------- #
 
 
 <div class="viewcode-block" id="build_answers">
 <a class="viewcode-back" href="../api/database.html#orm_queries.build_answers">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">build_answers</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">,</span> <span class="n">numbers</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">OrmAnswer</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Compute and format the requested questions (all eleven by default)."""</span>
-    <span class="n">wanted</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">numbers</span> <span class="ow">or</span> <span class="n">QUESTIONS</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-    <span class="n">answers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">OrmAnswer</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+def build_answers(session: Session, numbers: tuple[str, ...] | None = None) -&gt; list[OrmAnswer]:
+    """Compute and format the requested questions (all eleven by default)."""
+    wanted = set(numbers or QUESTIONS.keys())
+    answers: list[OrmAnswer] = []
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="n">number</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">lines</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">answers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">OrmAnswer</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">QUESTIONS</span><span class="p">[</span><span class="n">number</span><span class="p">],</span> <span class="n">lines</span> <span class="ow">or</span> <span class="p">[],</span> <span class="n">columns</span> <span class="ow">or</span> <span class="p">[],</span> <span class="n">table</span> <span class="ow">or</span> <span class="p">[]))</span>
+    def add(number: str, lines=None, columns=None, table=None):
+        answers.append(OrmAnswer(number, QUESTIONS[number], lines or [], columns or [], table or []))
 
-    <span class="k">if</span> <span class="s2">"1"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"1"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Fall 2026 applicant count"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">q1_fall_2026_count</span><span class="p">(</span><span class="n">session</span><span class="p">)))])</span>
-    <span class="k">if</span> <span class="s2">"2"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">international</span><span class="p">,</span> <span class="n">classified</span><span class="p">,</span> <span class="n">percent</span> <span class="o">=</span> <span class="n">q2_percent_international</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"2"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Percent international"</span><span class="p">,</span> <span class="n">format_percent</span><span class="p">(</span><span class="n">percent</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"International entries"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">international</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"Entries with a nationality classification"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">classified</span><span class="p">))])</span>
-    <span class="k">if</span> <span class="s2">"3"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">scores</span> <span class="o">=</span> <span class="n">q3_average_scores</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">labels</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"gpa"</span><span class="p">:</span> <span class="s2">"Average GPA"</span><span class="p">,</span> <span class="s2">"gre"</span><span class="p">:</span> <span class="s2">"Average GRE Quantitative"</span><span class="p">,</span>
-                  <span class="s2">"gre_v"</span><span class="p">:</span> <span class="s2">"Average GRE Verbal"</span><span class="p">,</span> <span class="s2">"gre_aw"</span><span class="p">:</span> <span class="s2">"Average GRE Analytical Writing"</span><span class="p">}</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"3"</span><span class="p">,</span> <span class="p">[(</span><span class="n">labels</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">format_average</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="si">}</span><span class="s2"> (n = </span><span class="si">{</span><span class="n">format_count</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="ow">in</span> <span class="n">scores</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
-    <span class="k">if</span> <span class="s2">"4"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">average</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">q4_american_fall_2026_gpa</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"4"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Average GPA of American Fall 2026 applicants"</span><span class="p">,</span> <span class="n">format_average</span><span class="p">(</span><span class="n">average</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"Applicants with a GPA"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">n</span><span class="p">))])</span>
-    <span class="k">if</span> <span class="s2">"5"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">accepted</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">percent</span> <span class="o">=</span> <span class="n">q5_fall_2025_acceptance</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"5"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Fall 2025 acceptance percentage"</span><span class="p">,</span> <span class="n">format_percent</span><span class="p">(</span><span class="n">percent</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"Accepted Fall 2025 entries"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">accepted</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"All Fall 2025 entries"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">total</span><span class="p">))])</span>
-    <span class="k">if</span> <span class="s2">"6"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">average</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">q6_accepted_fall_2026_gpa</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"6"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Average GPA of accepted Fall 2026 applicants"</span><span class="p">,</span> <span class="n">format_average</span><span class="p">(</span><span class="n">average</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"Applicants with a GPA"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">n</span><span class="p">))])</span>
-    <span class="k">if</span> <span class="s2">"7"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"7"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"JHU Computer Science master's entries"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">q7_jhu_cs_masters</span><span class="p">(</span><span class="n">session</span><span class="p">)))])</span>
-    <span class="k">if</span> <span class="s2">"8"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"8"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Accepted Fall 2026 CS PhD entries (original fields)"</span><span class="p">,</span>
-                   <span class="n">format_count</span><span class="p">(</span><span class="n">q8_accepted_cs_phd_original</span><span class="p">(</span><span class="n">session</span><span class="p">)))])</span>
-    <span class="k">if</span> <span class="s2">"9"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">original</span><span class="p">,</span> <span class="n">llm</span> <span class="o">=</span> <span class="n">q9_accepted_cs_phd_llm</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"9"</span><span class="p">,</span> <span class="p">[(</span><span class="s2">"Original-field count"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">original</span><span class="p">)),</span> <span class="p">(</span><span class="s2">"LLM-field count"</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">llm</span><span class="p">)),</span>
-                  <span class="p">(</span><span class="s2">"Difference"</span><span class="p">,</span> <span class="n">format_difference</span><span class="p">(</span><span class="n">llm</span> <span class="o">-</span> <span class="n">original</span><span class="p">))])</span>
-    <span class="k">if</span> <span class="s2">"10"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">rows</span> <span class="o">=</span> <span class="n">q10_degree_comparison</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"10"</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"Degree"</span><span class="p">,</span> <span class="s2">"Entries"</span><span class="p">,</span> <span class="s2">"Acceptances"</span><span class="p">,</span> <span class="s2">"Acceptance %"</span><span class="p">,</span> <span class="s2">"Avg GPA (accepted)"</span><span class="p">],</span>
-            <span class="n">table</span><span class="o">=</span><span class="p">[[</span><span class="n">d</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">format_count</span><span class="p">(</span><span class="n">a</span><span class="p">),</span> <span class="n">format_percent</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="n">format_average</span><span class="p">(</span><span class="n">g</span><span class="p">)]</span> <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span>
-    <span class="k">if</span> <span class="s2">"11"</span> <span class="ow">in</span> <span class="n">wanted</span><span class="p">:</span>
-        <span class="n">rows</span> <span class="o">=</span> <span class="n">q11_top_universities</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
-        <span class="n">add</span><span class="p">(</span><span class="s2">"11"</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"University"</span><span class="p">,</span> <span class="s2">"Entries"</span><span class="p">,</span> <span class="s2">"Acceptances"</span><span class="p">,</span> <span class="s2">"Acceptance %"</span><span class="p">],</span>
-            <span class="n">table</span><span class="o">=</span><span class="p">[[</span><span class="n">u</span><span class="p">,</span> <span class="n">format_count</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">format_count</span><span class="p">(</span><span class="n">a</span><span class="p">),</span> <span class="n">format_percent</span><span class="p">(</span><span class="n">p</span><span class="p">)]</span> <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span>
-    <span class="k">return</span> <span class="n">answers</span></div>
+    if "1" in wanted:
+        add("1", [("Fall 2026 applicant count", format_count(q1_fall_2026_count(session)))])
+    if "2" in wanted:
+        international, classified, percent = q2_percent_international(session)
+        add("2", [("Percent international", format_percent(percent)),
+                  ("International entries", format_count(international)),
+                  ("Entries with a nationality classification", format_count(classified))])
+    if "3" in wanted:
+        scores = q3_average_scores(session)
+        labels = {"gpa": "Average GPA", "gre": "Average GRE Quantitative",
+                  "gre_v": "Average GRE Verbal", "gre_aw": "Average GRE Analytical Writing"}
+        add("3", [(labels[k], f"{format_average(v)} (n = {format_count(n)})") for k, (v, n) in scores.items()])
+    if "4" in wanted:
+        average, n = q4_american_fall_2026_gpa(session)
+        add("4", [("Average GPA of American Fall 2026 applicants", format_average(average)),
+                  ("Applicants with a GPA", format_count(n))])
+    if "5" in wanted:
+        accepted, total, percent = q5_fall_2025_acceptance(session)
+        add("5", [("Fall 2025 acceptance percentage", format_percent(percent)),
+                  ("Accepted Fall 2025 entries", format_count(accepted)),
+                  ("All Fall 2025 entries", format_count(total))])
+    if "6" in wanted:
+        average, n = q6_accepted_fall_2026_gpa(session)
+        add("6", [("Average GPA of accepted Fall 2026 applicants", format_average(average)),
+                  ("Applicants with a GPA", format_count(n))])
+    if "7" in wanted:
+        add("7", [("JHU Computer Science master's entries", format_count(q7_jhu_cs_masters(session)))])
+    if "8" in wanted:
+        add("8", [("Accepted Fall 2026 CS PhD entries (original fields)",
+                   format_count(q8_accepted_cs_phd_original(session)))])
+    if "9" in wanted:
+        original, llm = q9_accepted_cs_phd_llm(session)
+        add("9", [("Original-field count", format_count(original)), ("LLM-field count", format_count(llm)),
+                  ("Difference", format_difference(llm - original))])
+    if "10" in wanted:
+        rows = q10_degree_comparison(session)
+        add("10", columns=["Degree", "Entries", "Acceptances", "Acceptance %", "Avg GPA (accepted)"],
+            table=[[d, format_count(e), format_count(a), format_percent(p), format_average(g)] for d, e, a, p, g in rows])
+    if "11" in wanted:
+        rows = q11_top_universities(session)
+        add("11", columns=["University", "Entries", "Acceptances", "Acceptance %"],
+            table=[[u, format_count(e), format_count(a), format_percent(p)] for u, e, a, p in rows])
+    return answers</div>
 
 
 
 <div class="viewcode-block" id="get_analysis">
 <a class="viewcode-back" href="../api/database.html#orm_queries.get_analysis">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_analysis</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Everything the Flask page displays, read through the ORM in one session."""</span>
-    <span class="k">with</span> <span class="n">SessionLocal</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">"summary"</span><span class="p">:</span> <span class="n">database_summary</span><span class="p">(</span><span class="n">session</span><span class="p">),</span> <span class="s2">"answers"</span><span class="p">:</span> <span class="n">build_answers</span><span class="p">(</span><span class="n">session</span><span class="p">)}</span></div>
+def get_analysis() -&gt; dict:
+    """Everything the Flask page displays, read through the ORM in one session."""
+    with SessionLocal() as session:
+        return {"summary": database_summary(session), "answers": build_answers(session)}</div>
 
 
 
-<span class="c1"># --------------------------------------------------------------------------- #</span>
-<span class="c1">#                                   Console                                   #</span>
-<span class="c1"># --------------------------------------------------------------------------- #</span>
+# --------------------------------------------------------------------------- #
+#                                   Console                                   #
+# --------------------------------------------------------------------------- #
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_print</span><span class="p">(</span><span class="n">answers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">OrmAnswer</span><span class="p">],</span> <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">title</span><span class="p">))</span>
-    <span class="k">for</span> <span class="n">answer</span> <span class="ow">in</span> <span class="n">answers</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Question </span><span class="si">{</span><span class="n">answer</span><span class="o">.</span><span class="n">number</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">answer</span><span class="o">.</span><span class="n">question</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">answer</span><span class="o">.</span><span class="n">lines</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">answer</span><span class="o">.</span><span class="n">table</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">table_line</span> <span class="ow">in</span> <span class="n">format_table</span><span class="p">(</span><span class="n">answer</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">answer</span><span class="o">.</span><span class="n">table</span><span class="p">):</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">table_line</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+def _print(answers: list[OrmAnswer], title: str) -&gt; None:
+    print(title)
+    print("=" * len(title))
+    for answer in answers:
+        print(f"\nQuestion {answer.number}: {answer.question}")
+        for label, value in answer.lines:
+            print(f"  {label}: {value}")
+        if answer.table:
+            for table_line in format_table(answer.columns, answer.table):
+                print(f"  {table_line}")
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Grad Café analysis with the SQLAlchemy ORM"</span><span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--all"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"print all eleven questions"</span><span class="p">)</span>
-    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
-    <span class="n">numbers</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">all</span> <span class="k">else</span> <span class="n">REQUIRED_ORM_QUESTIONS</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">with</span> <span class="n">SessionLocal</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
-            <span class="n">answers</span> <span class="o">=</span> <span class="n">build_answers</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">numbers</span><span class="p">)</span>
-    <span class="k">except</span> <span class="n">OperationalError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"error: cannot connect to PostgreSQL at </span><span class="si">{</span><span class="n">describe_target</span><span class="p">()</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">err</span><span class="o">.</span><span class="n">orig</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">2</span>
-    <span class="k">except</span> <span class="n">SQLAlchemyError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"error: query failed: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">3</span>
-    <span class="n">_print</span><span class="p">(</span><span class="n">answers</span><span class="p">,</span> <span class="s2">"Grad Café analysis (SQLAlchemy ORM)"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="mi">0</span>
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../api/database.html#orm_queries.main">[docs]</a>
+def main(argv: list[str] | None = None) -&gt; int:
+    """Console entry point: print the required ORM questions (all eleven with ``--all``); returns the exit code."""
+    parser = argparse.ArgumentParser(description="Grad Café analysis with the SQLAlchemy ORM")
+    parser.add_argument("--all", action="store_true", help="print all eleven questions")
+    args = parser.parse_args(argv)
+    numbers = None if args.all else REQUIRED_ORM_QUESTIONS
+    try:
+        with SessionLocal() as session:
+            answers = build_answers(session, numbers)
+    except OperationalError as err:
+        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err.orig}", file=sys.stderr)
+        return 2
+    except SQLAlchemyError as err:
+        print(f"error: query failed: {err}", file=sys.stderr)
+        return 3
+    _print(answers, "Grad Café analysis (SQLAlchemy ORM)")
+    return 0</div>
 
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
-    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+
+if __name__ == "__main__":
+    sys.exit(main())
 </pre></div>
 
            </div>

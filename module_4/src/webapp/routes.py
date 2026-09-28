@@ -1,9 +1,12 @@
 """
 routes.py - The analysis page and its two buttons.
 
-GET  /analysis          analysis page (reads the database through QUERY_FN on every request)
-POST /pull-data          run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
-POST /update-analysis    no-op that just confirms the page can be refreshed; 409 if busy
+Endpoints::
+
+    GET  /                 redirect to /analysis
+    GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
+    POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
+    POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
 """
 
 from __future__ import annotations

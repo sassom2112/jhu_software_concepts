@@ -200,9 +200,9 @@ Techniques used
 * **Busy state without waiting.** ``app.pull_state.try_start()`` puts the app
   in the *pull running* state directly. The test then checks the 409s, and
   ``finish()`` ends it.
-* **No network.** Every scraper test uses ``fake_site``. The scraper tests
-  also pass inside a network namespace with no network at all
-  (``unshare -rn``).
+* **No network.** Every scraper test that would make a request uses
+  ``fake_site``, and the parsing tests make none. The scraper tests also pass
+  inside a network namespace with no network at all (``unshare -rn``).
 * **monkeypatch / runpy / capsys / caplog / tmp_path.**
   ``monkeypatch.setattr`` / ``setenv`` swap a class, a constant or an
   environment variable for one test. ``runpy.run_module(name,
@@ -224,12 +224,12 @@ Continuous integration
 
 ``.github/workflows/tests.yml`` (at the repository root, where GitHub runs it,
 with an identical copy at ``module_4/.github/workflows/tests.yml``) runs on
-every push that touches ``module_4``:
+every push that changes ``module_4`` (or the workflow file, or ``.readthedocs.yaml``):
 
 1. It starts a ``postgres:17`` service container with a ``gradcafe_test``
    database and ``trust`` authentication, so no password is needed or stored.
-2. It installs Python 3.11 and ``module_4/requirements.txt``.
-3. It checks that the two copies of the workflow are identical.
+2. It checks that the two copies of the workflow are identical.
+3. It installs Python 3.11 and ``module_4/requirements.txt``.
 4. It runs the same pytest command as above, from the repository root, with
    ``DATABASE_URL=postgresql://gradcafe@localhost:5432/gradcafe_test``, and
    fails below 100% coverage.
@@ -238,8 +238,8 @@ every push that touches ``module_4``:
 Adding a test
 -------------
 
-* Name the file ``test_*.py`` and put it in ``module_4/tests``. Otherwise
-  pytest will not collect it.
+* Name the file ``test_*.py`` (pytest also accepts ``*_test.py``) and put
+  it in ``module_4/tests``, where ``conftest.py`` provides the fixtures.
 * Mark every test with one of the five markers, or set ``pytestmark`` for the
   whole file.
 * Use ``client`` for the page and buttons, ``db_conn`` / ``db_client`` for

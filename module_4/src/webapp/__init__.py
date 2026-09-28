@@ -3,7 +3,7 @@ webapp - Flask front end for the Grad Café analysis (Module 4).
 
 create_app() is the application factory.  Every external dependency the
 routes need — the scraper, the loader, the analysis query — is injected as a
-keyword argument with a production default, so tests can call
+keyword argument with a production default, so tests can call::
 
     create_app(scrape_fn=fake_scrape, load_fn=fake_load, query_fn=fake_query)
 

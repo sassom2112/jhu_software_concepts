@@ -9,6 +9,7 @@ explanations are reused by build_query_results.py to produce
 query_results.pdf, so the PDF always shows exactly what this file runs.
 
 Usage::
+
     python query_data.py
 
 Connection settings come from the environment (see db_config.py).
@@ -248,11 +249,13 @@ def _answer(number: str, sql: str, lines: list[tuple[str, str]], **extra) -> Ans
 
 
 def answer_q1(cur: psycopg.Cursor) -> Answer:
+    """Question 1: run SQL_Q1 and format the result as an Answer."""
     row = _one(cur, SQL_Q1)
     return _answer("1", SQL_Q1, [("Fall 2026 applicant count", format_count(row["fall_2026_entries"]))])
 
 
 def answer_q2(cur: psycopg.Cursor) -> Answer:
+    """Question 2: run SQL_Q2 and format the result as an Answer."""
     row = _one(cur, SQL_Q2)
     return _answer("2", SQL_Q2, [
         ("Percent international", format_percent(row["percent_international"])),
@@ -262,6 +265,7 @@ def answer_q2(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q3(cur: psycopg.Cursor) -> Answer:
+    """Question 3: run SQL_Q3 and format the result as an Answer."""
     row = _one(cur, SQL_Q3)
     return _answer("3", SQL_Q3, [
         ("Average GPA", f"{format_average(row['avg_gpa'])} (n = {format_count(row['gpa_n'])})"),
@@ -272,6 +276,7 @@ def answer_q3(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q4(cur: psycopg.Cursor) -> Answer:
+    """Question 4: run SQL_Q4 and format the result as an Answer."""
     row = _one(cur, SQL_Q4)
     return _answer("4", SQL_Q4, [
         ("Average GPA of American Fall 2026 applicants", format_average(row["avg_gpa"])),
@@ -280,6 +285,7 @@ def answer_q4(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q5(cur: psycopg.Cursor) -> Answer:
+    """Question 5: run SQL_Q5 and format the result as an Answer."""
     row = _one(cur, SQL_Q5)
     return _answer("5", SQL_Q5, [
         ("Fall 2025 acceptance percentage", format_percent(row["acceptance_percent"])),
@@ -289,6 +295,7 @@ def answer_q5(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q6(cur: psycopg.Cursor) -> Answer:
+    """Question 6: run SQL_Q6 and format the result as an Answer."""
     row = _one(cur, SQL_Q6)
     return _answer("6", SQL_Q6, [
         ("Average GPA of accepted Fall 2026 applicants", format_average(row["avg_gpa"])),
@@ -297,11 +304,13 @@ def answer_q6(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q7(cur: psycopg.Cursor) -> Answer:
+    """Question 7: run SQL_Q7 and format the result as an Answer."""
     row = _one(cur, SQL_Q7)
     return _answer("7", SQL_Q7, [("JHU Computer Science master's entries", format_count(row["jhu_cs_masters_entries"]))])
 
 
 def answer_q8(cur: psycopg.Cursor) -> Answer:
+    """Question 8: run SQL_Q8 and format the result as an Answer."""
     row = _one(cur, SQL_Q8)
     return _answer("8", SQL_Q8, [
         ("Accepted Fall 2026 CS PhD entries (original fields)", format_count(row["accepted_cs_phd_entries"])),
@@ -309,6 +318,7 @@ def answer_q8(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q9(cur: psycopg.Cursor) -> Answer:
+    """Question 9: run SQL_Q9 and format the result as an Answer."""
     row = _one(cur, SQL_Q9)
     original, llm = row["original_field_count"], row["llm_field_count"]
     return _answer("9", SQL_Q9, [
@@ -319,6 +329,7 @@ def answer_q9(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q10(cur: psycopg.Cursor) -> Answer:
+    """Question 10: run SQL_Q10 and format the result as an Answer."""
     cur.execute(SQL_Q10)
     table = [
         [r["degree"], format_count(r["entries"]), format_count(r["acceptances"]),
@@ -330,6 +341,7 @@ def answer_q10(cur: psycopg.Cursor) -> Answer:
 
 
 def answer_q11(cur: psycopg.Cursor) -> Answer:
+    """Question 11: run SQL_Q11 and format the result as an Answer."""
     cur.execute(SQL_Q11)
     table = [
         [r["university"], format_count(r["entries"]), format_count(r["acceptances"]), format_percent(r["acceptance_percent"])]
@@ -356,6 +368,7 @@ def run_all(conn: psycopg.Connection) -> list[Answer]:
 
 
 def print_answers(answers: list[Answer], title: str) -> None:
+    """Print answers as plain text under a title (the console output of this module)."""
     print(title)
     print("=" * len(title))
     for answer in answers:
@@ -368,6 +381,7 @@ def print_answers(answers: list[Answer], title: str) -> None:
 
 
 def main() -> int:
+    """Console entry point: print all eleven answers; returns 0, 2 (cannot connect) or 3 (query failed)."""
     try:
         conn = psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
     except psycopg.ProgrammingError:  # unparseable settings; do not echo them

@@ -9,6 +9,7 @@
   <title>Troubleshooting &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
@@ -89,9 +90,9 @@
 <section id="running-the-tests-locally">
 <h2>Running the tests locally<a class="headerlink" href="#running-the-tests-locally" title="Link to this heading"></a></h2>
 <dl class="simple">
-<dt><strong>pytest reports “collected 0 items”.</strong></dt><dd><p>pytest only collects files named <code class="docutils literal notranslate"><span class="pre">test_*.py</span></code> inside <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code>.
-Check the file name (<code class="docutils literal notranslate"><span class="pre">smoketest.py</span></code> is skipped; <code class="docutils literal notranslate"><span class="pre">test_smoke.py</span></code> is
-collected) and pass <code class="docutils literal notranslate"><span class="pre">module_4</span></code> as the path.</p>
+<dt><strong>pytest reports “collected 0 items”.</strong></dt><dd><p>pytest only collects files named <code class="docutils literal notranslate"><span class="pre">test_*.py</span></code> (or <code class="docutils literal notranslate"><span class="pre">*_test.py</span></code>) under
+the path you pass. Check the file name (<code class="docutils literal notranslate"><span class="pre">smoketest.py</span></code> is skipped;
+<code class="docutils literal notranslate"><span class="pre">test_smoke.py</span></code> is collected) and pass <code class="docutils literal notranslate"><span class="pre">module_4</span></code> as the path.</p>
 </dd>
 <dt><strong>“Coverage failure” or “module module_4/src was never imported” although tests pass.</strong></dt><dd><p>The run started in the wrong folder. <code class="docutils literal notranslate"><span class="pre">pytest.ini</span></code> measures
 <code class="docutils literal notranslate"><span class="pre">--cov=module_4/src</span></code> relative to the directory pytest starts in. Run from
@@ -118,7 +119,7 @@ read it. Or export <code class="docutils literal notranslate"><span class="pre">
 <dt><strong>“ModuleNotFoundError: No module named ‘webapp’” (or ‘scrape’, ‘load_data’).</strong></dt><dd><p><code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code> puts <code class="docutils literal notranslate"><span class="pre">module_4/src</span></code> on <code class="docutils literal notranslate"><span class="pre">sys.path</span></code>. Make sure
 <code class="docutils literal notranslate"><span class="pre">conftest.py</span></code> is still in <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code> and has not been renamed.</p>
 </dd>
-<dt><strong>The editor underlines ``import webapp`` / ``import pytest`` as unresolved, but pytest runs fine.</strong></dt><dd><p>The editor is using a different Python. In VS Code, run <em>Python: Select
+<dt><strong>The editor underlines “import webapp” or “import pytest” as unresolved, but pytest runs fine.</strong></dt><dd><p>The editor is using a different Python. In VS Code, run <em>Python: Select
 Interpreter</em>, choose <code class="docutils literal notranslate"><span class="pre">module_4/.venv/bin/python</span></code>, and add
 <code class="docutils literal notranslate"><span class="pre">module_4/src</span></code> to <code class="docutils literal notranslate"><span class="pre">python.analysis.extraPaths</span></code>.</p>
 </dd>
@@ -141,7 +142,7 @@ that holds the data.</p>
 <dt><strong>Every count on the page is 0.</strong></dt><dd><p>The table is empty. Load the Module 2 data with <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">src/load_data.py</span></code>
 (see <a class="reference internal" href="overview.html"><span class="doc">Overview and setup</span></a>).</p>
 </dd>
-<dt><strong>``python src/load_data.py`` says “cannot read input”.</strong></dt><dd><p>The input file is looked up by its bare name in the <code class="docutils literal notranslate"><span class="pre">module_4</span></code> folder.
+<dt><strong>python src/load_data.py says “cannot read input”.</strong></dt><dd><p>The input file is looked up by its bare name in the <code class="docutils literal notranslate"><span class="pre">module_4</span></code> folder.
 Check that <code class="docutils literal notranslate"><span class="pre">llm_extend_applicant_data.json</span></code> is there, or pass
 <code class="docutils literal notranslate"><span class="pre">--file</span> <span class="pre">NAME</span></code> with a file that is.</p>
 </dd>
@@ -175,7 +176,7 @@ database. The service container creates it through <code class="docutils literal
 <dt><strong>Database tests fail with “Connection refused” in the first seconds of the job.</strong></dt><dd><p>The service is not ready yet. The workflow’s <code class="docutils literal notranslate"><span class="pre">--health-cmd</span> <span class="pre">pg_isready</span></code>
 options make GitHub wait for it, so keep them if you edit the service.</p>
 </dd>
-<dt><strong>“The two copies of the workflow differ”.</strong></dt><dd><p>Copy the root workflow over the module copy
+<dt><strong>The step “The workflow copy under module_4 matches this file” fails (”… differ: byte N, line M”).</strong></dt><dd><p>Copy the root workflow over the module copy
 (<code class="docutils literal notranslate"><span class="pre">cp</span> <span class="pre">.github/workflows/tests.yml</span> <span class="pre">module_4/.github/workflows/tests.yml</span></code>)
 and commit both.</p>
 </dd>

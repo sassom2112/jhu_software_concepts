@@ -8,6 +8,7 @@
   <title>db_config &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -77,120 +78,120 @@
            <div itemprop="articleBody">
              
   <h1>Source code for db_config</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""</span>
-<span class="sd">db_config.py - One place that knows how to reach PostgreSQL.</span>
+<span></span>"""
+db_config.py - One place that knows how to reach PostgreSQL.
 
-<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 3.</span>
+JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 
-<span class="sd">No credentials live in this repository.  The connection is described by</span>
-<span class="sd">environment variables, in this order of preference:</span>
+No credentials live in this repository.  The connection is described by
+environment variables, in this order of preference:
 
-<span class="sd">  1. DATABASE_URL: a URL such as  postgresql://gradcafe@localhost:5432/gradcafe</span>
-<span class="sd">     (a libpq "key=value" string such as  host=localhost dbname=gradcafe  and the</span>
-<span class="sd">     SQLAlchemy spelling postgresql+psycopg://... also work).</span>
-<span class="sd">  2. The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE</span>
-<span class="sd">     (defaults: localhost, 5432, gradcafe, gradcafe).  PGHOST may also be a</span>
-<span class="sd">     Unix-socket directory such as /var/run/postgresql.</span>
+  1. DATABASE_URL: a URL such as  postgresql://gradcafe@localhost:5432/gradcafe
+     (a libpq "key=value" string such as  host=localhost dbname=gradcafe  and the
+     SQLAlchemy spelling postgresql+psycopg://... also work).
+  2. The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE
+     (defaults: localhost, 5432, gradcafe, gradcafe).  PGHOST may also be a
+     Unix-socket directory such as /var/run/postgresql.
 
-<span class="sd">The password is best supplied by libpq itself, from ~/.pgpass (chmod 600) or</span>
-<span class="sd">the PGPASSWORD variable, so it never has to appear in a URL, a file in the</span>
-<span class="sd">repository, or a shell history.  Both psycopg (load_data.py, query_data.py)</span>
-<span class="sd">and SQLAlchemy's psycopg driver (models.py) go through libpq, so the same</span>
-<span class="sd">settings serve every part of the project.</span>
-<span class="sd">"""</span>
+The password is best supplied by libpq itself, from ~/.pgpass (chmod 600) or
+the PGPASSWORD variable, so it never has to appear in a URL, a file in the
+repository, or a shell history.  Both psycopg (load_data.py, query_data.py)
+and SQLAlchemy's psycopg driver (models.py) go through libpq, so the same
+settings serve every part of the project.
+"""
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+from __future__ import annotations
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+import os
+import re
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">psycopg</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">psycopg.conninfo</span><span class="w"> </span><span class="kn">import</span> <span class="n">conninfo_to_dict</span><span class="p">,</span> <span class="n">make_conninfo</span>
+import psycopg
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-<span class="n">DEFAULT_HOST</span> <span class="o">=</span> <span class="s2">"localhost"</span>
-<span class="n">DEFAULT_PORT</span> <span class="o">=</span> <span class="s2">"5432"</span>
-<span class="n">DEFAULT_USER</span> <span class="o">=</span> <span class="s2">"gradcafe"</span>
-<span class="n">DEFAULT_DATABASE</span> <span class="o">=</span> <span class="s2">"gradcafe"</span>
-<span class="n">CONNECT_TIMEOUT_SECONDS</span> <span class="o">=</span> <span class="mi">10</span>
+DEFAULT_HOST = "localhost"
+DEFAULT_PORT = "5432"
+DEFAULT_USER = "gradcafe"
+DEFAULT_DATABASE = "gradcafe"
+CONNECT_TIMEOUT_SECONDS = 10
 
-<span class="n">TABLE_NAME</span> <span class="o">=</span> <span class="s2">"applicants"</span>
+TABLE_NAME = "applicants"
 
-<span class="n">INVALID_SETTINGS_MESSAGE</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="s2">"error: the database connection settings are not valid; check DATABASE_URL or "</span>
-    <span class="s2">"PGHOST/PGPORT/PGUSER/PGDATABASE (see README)"</span>
-<span class="p">)</span>
+INVALID_SETTINGS_MESSAGE = (
+    "error: the database connection settings are not valid; check DATABASE_URL or "
+    "PGHOST/PGPORT/PGUSER/PGDATABASE (see README)"
+)
 
-<span class="c1"># "postgresql+psycopg://" (SQLAlchemy style) is reduced to the scheme libpq understands.</span>
-<span class="n">_DRIVER_SUFFIX</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^(postgres(?:ql)?)\+\w+://"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+# "postgresql+psycopg://" (SQLAlchemy style) is reduced to the scheme libpq understands.
+_DRIVER_SUFFIX = re.compile(r"^(postgres(?:ql)?)\+\w+://", re.IGNORECASE)
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_pg_settings</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">"host"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"PGHOST"</span><span class="p">,</span> <span class="n">DEFAULT_HOST</span><span class="p">),</span>
-        <span class="s2">"port"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"PGPORT"</span><span class="p">,</span> <span class="n">DEFAULT_PORT</span><span class="p">),</span>
-        <span class="s2">"user"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"PGUSER"</span><span class="p">,</span> <span class="n">DEFAULT_USER</span><span class="p">),</span>
-        <span class="s2">"dbname"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"PGDATABASE"</span><span class="p">,</span> <span class="n">DEFAULT_DATABASE</span><span class="p">),</span>
-    <span class="p">}</span>
+def _pg_settings() -&gt; dict[str, str]:
+    return {
+        "host": os.environ.get("PGHOST", DEFAULT_HOST),
+        "port": os.environ.get("PGPORT", DEFAULT_PORT),
+        "user": os.environ.get("PGUSER", DEFAULT_USER),
+        "dbname": os.environ.get("PGDATABASE", DEFAULT_DATABASE),
+    }
 
 
 <div class="viewcode-block" id="get_database_url">
 <a class="viewcode-back" href="../api/database.html#db_config.get_database_url">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_database_url</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Connection string for psycopg: DATABASE_URL (URL or key=value), else a key=value DSN from PG* variables."""</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"DATABASE_URL"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">url</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_DRIVER_SUFFIX</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">"\1://"</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">make_conninfo</span><span class="p">(</span><span class="o">**</span><span class="n">_pg_settings</span><span class="p">())</span></div>
+def get_database_url() -&gt; str:
+    """Connection string for psycopg: DATABASE_URL (URL or key=value), else a key=value DSN from PG* variables."""
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if url:
+        return _DRIVER_SUFFIX.sub(r"\1://", url, count=1)
+    return make_conninfo(**_pg_settings())</div>
 
 
 
 <div class="viewcode-block" id="get_sqlalchemy_url">
 <a class="viewcode-back" href="../api/database.html#db_config.get_sqlalchemy_url">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_sqlalchemy_url</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">"""The same connection as a sqlalchemy.engine.URL that selects the psycopg (v3) driver.</span>
+def get_sqlalchemy_url():
+    """The same connection as a sqlalchemy.engine.URL that selects the psycopg (v3) driver.
 
-<span class="sd">    The settings are parsed by psycopg's own libpq-compatible parser and rebuilt</span>
-<span class="sd">    field by field, so URLs, key=value strings, Unix-socket directories and IPv6</span>
-<span class="sd">    hosts all work, and extra options such as sslmode are kept.  A non-numeric</span>
-<span class="sd">    port is passed through unchanged so libpq rejects it when connecting, with</span>
-<span class="sd">    the same connection error the psycopg scripts report.  Raises</span>
-<span class="sd">    psycopg.ProgrammingError if the settings cannot be parsed at all.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">URL</span>
+    The settings are parsed by psycopg's own libpq-compatible parser and rebuilt
+    field by field, so URLs, key=value strings, Unix-socket directories and IPv6
+    hosts all work, and extra options such as sslmode are kept.  A non-numeric
+    port is passed through unchanged so libpq rejects it when connecting, with
+    the same connection error the psycopg scripts report.  Raises
+    psycopg.ProgrammingError if the settings cannot be parsed at all.
+    """
+    from sqlalchemy.engine import URL
 
-    <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">conninfo_to_dict</span><span class="p">(</span><span class="n">get_database_url</span><span class="p">()))</span>
-    <span class="n">user</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"user"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="n">password</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"password"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"host"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="n">dbname</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"dbname"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="n">port</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"port"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">port</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">port</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
-        <span class="n">params</span><span class="p">[</span><span class="s2">"port"</span><span class="p">]</span> <span class="o">=</span> <span class="n">port</span>
-    <span class="k">return</span> <span class="n">URL</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-        <span class="s2">"postgresql+psycopg"</span><span class="p">,</span>
-        <span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="p">,</span>
-        <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span>
-        <span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span>
-        <span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)</span> <span class="k">if</span> <span class="n">port</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">database</span><span class="o">=</span><span class="n">dbname</span><span class="p">,</span>
-        <span class="n">query</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-    <span class="p">)</span></div>
+    params = dict(conninfo_to_dict(get_database_url()))
+    user = params.pop("user", None)
+    password = params.pop("password", None)
+    host = params.pop("host", None)
+    dbname = params.pop("dbname", None)
+    port = str(params.pop("port", "") or "")
+    if port and not port.isdigit():
+        params["port"] = port
+    return URL.create(
+        "postgresql+psycopg",
+        username=user,
+        password=password,
+        host=host,
+        port=int(port) if port.isdigit() else None,
+        database=dbname,
+        query=params,
+    )</div>
 
 
 
 <div class="viewcode-block" id="describe_target">
 <a class="viewcode-back" href="../api/database.html#db_config.describe_target">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">describe_target</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""user@host:port/dbname for messages; never raises and never shows a password or the raw setting."""</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">params</span> <span class="o">=</span> <span class="n">conninfo_to_dict</span><span class="p">(</span><span class="n">get_database_url</span><span class="p">())</span>
-    <span class="k">except</span> <span class="p">(</span><span class="n">psycopg</span><span class="o">.</span><span class="n">ProgrammingError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s2">"&lt;unparseable DATABASE_URL&gt;"</span>
-    <span class="n">user</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"user"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">DEFAULT_USER</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"host"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">DEFAULT_HOST</span>
-    <span class="n">port</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"port"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">DEFAULT_PORT</span>
-    <span class="n">dbname</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"dbname"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">DEFAULT_DATABASE</span>
-    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">user</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">dbname</span><span class="si">}</span><span class="s2">"</span></div>
+def describe_target() -&gt; str:
+    """``user@host:port/dbname`` for messages; never raises and never shows a password or the raw setting."""
+    try:
+        params = conninfo_to_dict(get_database_url())
+    except (psycopg.ProgrammingError, ValueError):
+        return "&lt;unparseable DATABASE_URL&gt;"
+    user = params.get("user") or DEFAULT_USER
+    host = params.get("host") or DEFAULT_HOST
+    port = params.get("port") or DEFAULT_PORT
+    dbname = params.get("dbname") or DEFAULT_DATABASE
+    return f"{user}@{host}:{port}/{dbname}"</div>
 
 </pre></div>
 

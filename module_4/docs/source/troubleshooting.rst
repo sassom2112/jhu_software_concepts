@@ -5,9 +5,9 @@ Running the tests locally
 -------------------------
 
 **pytest reports "collected 0 items".**
-   pytest only collects files named ``test_*.py`` inside ``module_4/tests``.
-   Check the file name (``smoketest.py`` is skipped; ``test_smoke.py`` is
-   collected) and pass ``module_4`` as the path.
+   pytest only collects files named ``test_*.py`` (or ``*_test.py``) under
+   the path you pass. Check the file name (``smoketest.py`` is skipped;
+   ``test_smoke.py`` is collected) and pass ``module_4`` as the path.
 
 **"Coverage failure" or "module module_4/src was never imported" although tests pass.**
    The run started in the wrong folder. ``pytest.ini`` measures
@@ -40,7 +40,7 @@ Running the tests locally
    ``tests/conftest.py`` puts ``module_4/src`` on ``sys.path``. Make sure
    ``conftest.py`` is still in ``module_4/tests`` and has not been renamed.
 
-**The editor underlines ``import webapp`` / ``import pytest`` as unresolved, but pytest runs fine.**
+**The editor underlines "import webapp" or "import pytest" as unresolved, but pytest runs fine.**
    The editor is using a different Python. In VS Code, run *Python: Select
    Interpreter*, choose ``module_4/.venv/bin/python``, and add
    ``module_4/src`` to ``python.analysis.extraPaths``.
@@ -65,7 +65,7 @@ Running the application
    The table is empty. Load the Module 2 data with ``python src/load_data.py``
    (see :doc:`overview`).
 
-**``python src/load_data.py`` says "cannot read input".**
+**python src/load_data.py says "cannot read input".**
    The input file is looked up by its bare name in the ``module_4`` folder.
    Check that ``llm_extend_applicant_data.json`` is there, or pass
    ``--file NAME`` with a file that is.
@@ -104,7 +104,7 @@ GitHub Actions
    The service is not ready yet. The workflow's ``--health-cmd pg_isready``
    options make GitHub wait for it, so keep them if you edit the service.
 
-**"The two copies of the workflow differ".**
+**The step "The workflow copy under module_4 matches this file" fails ("... differ: byte N, line M").**
    Copy the root workflow over the module copy
    (``cp .github/workflows/tests.yml module_4/.github/workflows/tests.yml``)
    and commit both.

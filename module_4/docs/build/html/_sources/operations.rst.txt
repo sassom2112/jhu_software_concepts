@@ -99,9 +99,10 @@ Rows added by Pull Data
 Pull Data cleans the new entries but does not run the Module 2 LLM
 standardizer, which needs its own environment (``llm_hosting/``) and a local
 model. New rows therefore have ``NULL`` in ``llm_generated_program`` and
-``llm_generated_university``. Questions 9 and 11 are the only ones that use
-those columns, and they leave such rows out until the standardizer has been
-run over them.
+``llm_generated_university``. Question 11 and the LLM-field count of Question 9
+are the only results that use those columns. They leave such rows out until
+the standardizer has been run over them. Question 9's original-field count
+does include them.
 
 Secrets and configuration
 -------------------------

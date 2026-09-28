@@ -21,6 +21,7 @@ Design:
   * The whole load is one transaction: it either completes or changes nothing.
 
 Usage::
+
     python load_data.py                                   # llm_extend_applicant_data.json
     python load_data.py --file applicant_data.json        # works without LLM columns too
     python load_data.py --reset                           # drop and recreate the table first
@@ -252,6 +253,7 @@ def _local_file(name: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Command line: load a JSON file; returns 0, 1 (unreadable input), 2 (cannot connect) or 3 (rolled back)."""
     parser = argparse.ArgumentParser(description="Load cleaned Grad Cafe data into PostgreSQL")
     parser.add_argument("--file", default=DEFAULT_INPUT,
                         help=f"JSON (or .json.gz) file name in the module folder (default {DEFAULT_INPUT})")

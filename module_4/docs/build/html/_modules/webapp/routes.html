@@ -8,6 +8,7 @@
   <title>webapp.routes &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
@@ -78,79 +79,82 @@
            <div itemprop="articleBody">
              
   <h1>Source code for webapp.routes</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""</span>
-<span class="sd">routes.py - The analysis page and its two buttons.</span>
+<span></span>"""
+routes.py - The analysis page and its two buttons.
 
-<span class="sd">GET  /analysis          analysis page (reads the database through QUERY_FN on every request)</span>
-<span class="sd">POST /pull-data          run SCRAPE_FN then LOAD_FN; 409 if a pull is already running</span>
-<span class="sd">POST /update-analysis    no-op that just confirms the page can be refreshed; 409 if busy</span>
-<span class="sd">"""</span>
+Endpoints::
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+    GET  /                 redirect to /analysis
+    GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
+    POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
+    POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
+"""
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+from __future__ import annotations
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Blueprint</span><span class="p">,</span> <span class="n">current_app</span><span class="p">,</span> <span class="n">jsonify</span><span class="p">,</span> <span class="n">redirect</span><span class="p">,</span> <span class="n">render_template</span><span class="p">,</span> <span class="n">url_for</span>
+from datetime import datetime
 
-<span class="n">bp</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">"analysis"</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">)</span>
+from flask import Blueprint, current_app, jsonify, redirect, render_template, url_for
+
+bp = Blueprint("analysis", __name__)
 
 
 <div class="viewcode-block" id="root">
 <a class="viewcode-back" href="../../api/web.html#webapp.routes.root">[docs]</a>
-<span class="nd">@bp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">root</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">"""Convenience redirect; the analysis page itself lives at /analysis."""</span>
-    <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s2">"analysis.index"</span><span class="p">))</span></div>
+@bp.get("/")
+def root():
+    """Convenience redirect; the analysis page itself lives at /analysis."""
+    return redirect(url_for("analysis.index"))</div>
 
 
 
 <div class="viewcode-block" id="index">
 <a class="viewcode-back" href="../../api/web.html#webapp.routes.index">[docs]</a>
-<span class="nd">@bp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/analysis"</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">"""Render every analysis result the injected QUERY_FN returns."""</span>
-    <span class="n">analysis</span><span class="p">,</span> <span class="n">error</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">analysis</span> <span class="o">=</span> <span class="n">current_app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">"QUERY_FN"</span><span class="p">]()</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>  <span class="c1"># noqa: BLE001 - any query failure becomes a friendly banner, not a 500</span>
-        <span class="n">error</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"The analysis could not be loaded because the database is not reachable. "</span>
-                 <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">err</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span>
-        <span class="s2">"analysis.html"</span><span class="p">,</span>
-        <span class="n">analysis</span><span class="o">=</span><span class="n">analysis</span><span class="p">,</span>
-        <span class="n">error</span><span class="o">=</span><span class="n">error</span><span class="p">,</span>
-        <span class="n">pull_running</span><span class="o">=</span><span class="n">current_app</span><span class="o">.</span><span class="n">pull_state</span><span class="o">.</span><span class="n">is_running</span><span class="p">,</span>
-        <span class="n">computed_at</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">"%B </span><span class="si">%d</span><span class="s2">, %Y at %I:%M:%S %p"</span><span class="p">),</span>
-    <span class="p">)</span></div>
+@bp.get("/analysis")
+def index():
+    """Render every analysis result the injected QUERY_FN returns."""
+    analysis, error = None, None
+    try:
+        analysis = current_app.config["QUERY_FN"]()
+    except Exception as err:  # noqa: BLE001 - any query failure becomes a friendly banner, not a 500
+        error = ("The analysis could not be loaded because the database is not reachable. "
+                 f"({err.__class__.__name__})")
+    return render_template(
+        "analysis.html",
+        analysis=analysis,
+        error=error,
+        pull_running=current_app.pull_state.is_running,
+        computed_at=datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
+    )</div>
 
 
 
 <div class="viewcode-block" id="pull_data">
 <a class="viewcode-back" href="../../api/web.html#webapp.routes.pull_data">[docs]</a>
-<span class="nd">@bp</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">"/pull-data"</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">pull_data</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">"""Fetch new entries and load them; refuses to start a second pull while one runs."""</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_app</span><span class="o">.</span><span class="n">pull_state</span><span class="o">.</span><span class="n">try_start</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">busy</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="mi">409</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">raw_entries</span> <span class="o">=</span> <span class="n">current_app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">"SCRAPE_FN"</span><span class="p">]()</span>
-        <span class="n">inserted</span> <span class="o">=</span> <span class="n">current_app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">"LOAD_FN"</span><span class="p">](</span><span class="n">raw_entries</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>  <span class="c1"># noqa: BLE001 - report the failure; never crash the request</span>
-        <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">ok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)),</span> <span class="mi">500</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="n">current_app</span><span class="o">.</span><span class="n">pull_state</span><span class="o">.</span><span class="n">finish</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inserted</span><span class="o">=</span><span class="n">inserted</span><span class="p">),</span> <span class="mi">200</span></div>
+@bp.post("/pull-data")
+def pull_data():
+    """Fetch new entries and load them; refuses to start a second pull while one runs."""
+    if not current_app.pull_state.try_start():
+        return jsonify(busy=True), 409
+    try:
+        raw_entries = current_app.config["SCRAPE_FN"]()
+        inserted = current_app.config["LOAD_FN"](raw_entries)
+    except Exception as err:  # noqa: BLE001 - report the failure; never crash the request
+        return jsonify(ok=False, error=str(err)), 500
+    finally:
+        current_app.pull_state.finish()
+    return jsonify(ok=True, inserted=inserted), 200</div>
 
 
 
 <div class="viewcode-block" id="update_analysis">
 <a class="viewcode-back" href="../../api/web.html#webapp.routes.update_analysis">[docs]</a>
-<span class="nd">@bp</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">"/update-analysis"</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">update_analysis</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">"""Confirms the page can be refreshed; performs no database work and never gates on itself."""</span>
-    <span class="k">if</span> <span class="n">current_app</span><span class="o">.</span><span class="n">pull_state</span><span class="o">.</span><span class="n">is_running</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">busy</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="mi">409</span>
-    <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">ok</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="mi">200</span></div>
+@bp.post("/update-analysis")
+def update_analysis():
+    """Confirms the page can be refreshed; performs no database work and never gates on itself."""
+    if current_app.pull_state.is_running:
+        return jsonify(busy=True), 409
+    return jsonify(ok=True), 200</div>
 
 </pre></div>
 

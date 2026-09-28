@@ -23,7 +23,8 @@ layer below it:
    |  load_data.py -> INSERT ...        |   |  analysis_common.py (rules,     |
    |     ON CONFLICT (p_id) DO NOTHING  |   |    wording, 2-decimal format)   |
    +----------------+-------------------+   +----------------+----------------+
-                    | psycopg 3                              | SQLAlchemy 2
+                    | psycopg 3                              | SQLAlchemy 2 (ORM),
+                    |                                        | psycopg 3 (query_data)
                     v                                        v
    +-- Database layer --------------------------------------------------------+
    |  PostgreSQL table "applicants" (p_id INTEGER PRIMARY KEY, ...)          |

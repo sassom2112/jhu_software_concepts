@@ -9,6 +9,7 @@
   <title>Database and analysis layer &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -76,17 +77,45 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-query_data">Questions in raw SQL</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.Answer"><code class="docutils literal notranslate"><span class="pre">Answer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q1"><code class="docutils literal notranslate"><span class="pre">answer_q1()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q2"><code class="docutils literal notranslate"><span class="pre">answer_q2()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q3"><code class="docutils literal notranslate"><span class="pre">answer_q3()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q4"><code class="docutils literal notranslate"><span class="pre">answer_q4()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q5"><code class="docutils literal notranslate"><span class="pre">answer_q5()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q6"><code class="docutils literal notranslate"><span class="pre">answer_q6()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q7"><code class="docutils literal notranslate"><span class="pre">answer_q7()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q8"><code class="docutils literal notranslate"><span class="pre">answer_q8()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q9"><code class="docutils literal notranslate"><span class="pre">answer_q9()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q10"><code class="docutils literal notranslate"><span class="pre">answer_q10()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q11"><code class="docutils literal notranslate"><span class="pre">answer_q11()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.run_all"><code class="docutils literal notranslate"><span class="pre">run_all()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.print_answers"><code class="docutils literal notranslate"><span class="pre">print_answers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-orm_queries">Questions through the ORM</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#orm_queries.OrmAnswer"><code class="docutils literal notranslate"><span class="pre">OrmAnswer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q1_fall_2026_count"><code class="docutils literal notranslate"><span class="pre">q1_fall_2026_count()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q2_percent_international"><code class="docutils literal notranslate"><span class="pre">q2_percent_international()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q3_average_scores"><code class="docutils literal notranslate"><span class="pre">q3_average_scores()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q4_american_fall_2026_gpa"><code class="docutils literal notranslate"><span class="pre">q4_american_fall_2026_gpa()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q5_fall_2025_acceptance"><code class="docutils literal notranslate"><span class="pre">q5_fall_2025_acceptance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q6_accepted_fall_2026_gpa"><code class="docutils literal notranslate"><span class="pre">q6_accepted_fall_2026_gpa()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q7_jhu_cs_masters"><code class="docutils literal notranslate"><span class="pre">q7_jhu_cs_masters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q8_accepted_cs_phd_original"><code class="docutils literal notranslate"><span class="pre">q8_accepted_cs_phd_original()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q9_accepted_cs_phd_llm"><code class="docutils literal notranslate"><span class="pre">q9_accepted_cs_phd_llm()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q10_degree_comparison"><code class="docutils literal notranslate"><span class="pre">q10_degree_comparison()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.q11_top_universities"><code class="docutils literal notranslate"><span class="pre">q11_top_universities()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#orm_queries.database_summary"><code class="docutils literal notranslate"><span class="pre">database_summary()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#orm_queries.build_answers"><code class="docutils literal notranslate"><span class="pre">build_answers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#orm_queries.get_analysis"><code class="docutils literal notranslate"><span class="pre">get_analysis()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#orm_queries.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#module-build_query_results">Query-results report</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-build_query_results">Query-results report</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#build_query_results.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -166,7 +195,7 @@ psycopg.ProgrammingError if the settings cannot be parsed at all.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="db_config.describe_target">
 <span class="sig-prename descclassname"><span class="pre">db_config.</span></span><span class="sig-name descname"><span class="pre">describe_target</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/db_config.html#describe_target"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#db_config.describe_target" title="Link to this definition"></a></dt>
-<dd><p><a class="reference external" href="mailto:user&#37;&#52;&#48;host">user<span>&#64;</span>host</a>:port/dbname for messages; never raises and never shows a password or the raw setting.</p>
+<dd><p><code class="docutils literal notranslate"><span class="pre">user&#64;host:port/dbname</span></code> for messages; never raises and never shows a password or the raw setting.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>str</p>
@@ -189,9 +218,9 @@ an engine does not open a connection; connections are pooled, checked
 with pool_pre_ping so a restarted database does not break the web app,
 and give up after a 10-second connect timeout.</p></li>
 <li><p><cite>SessionLocal</cite> is a sessionmaker; use it as a context manager:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Applicant</span><span class="p">,</span> <span class="n">SessionLocal</span>
-<span class="k">with</span> <span class="n">SessionLocal</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
-    <span class="n">first</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Applicant</span><span class="p">,</span> <span class="mi">1020481</span><span class="p">)</span>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>from models import Applicant, SessionLocal
+with SessionLocal() as session:
+    first = session.get(Applicant, 1020481)
 </pre></div>
 </div>
 </li>
@@ -309,10 +338,10 @@ number formatting.</p>
 and formats the numbers it gets back.  The same SQL text, question wording and
 explanations are reused by build_query_results.py to produce
 query_results.pdf, so the PDF always shows exactly what this file runs.</p>
-<dl class="simple">
-<dt>Usage::</dt><dd><p>python query_data.py</p>
-</dd>
-</dl>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python query_data.py
+</pre></div>
+</div>
 <p>Connection settings come from the environment (see db_config.py).</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="query_data.Answer">
@@ -335,6 +364,160 @@ query_results.pdf, so the PDF always shows exactly what this file runs.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q1">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q1</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q1"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q1" title="Link to this definition"></a></dt>
+<dd><p>Question 1: run SQL_Q1 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q2">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q2"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q2" title="Link to this definition"></a></dt>
+<dd><p>Question 2: run SQL_Q2 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q3">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q3</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q3"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q3" title="Link to this definition"></a></dt>
+<dd><p>Question 3: run SQL_Q3 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q4">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q4</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q4"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q4" title="Link to this definition"></a></dt>
+<dd><p>Question 4: run SQL_Q4 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q5">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q5</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q5"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q5" title="Link to this definition"></a></dt>
+<dd><p>Question 5: run SQL_Q5 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q6">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q6</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q6"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q6" title="Link to this definition"></a></dt>
+<dd><p>Question 6: run SQL_Q6 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q7">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q7</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q7"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q7" title="Link to this definition"></a></dt>
+<dd><p>Question 7: run SQL_Q7 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q8">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q8</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q8"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q8" title="Link to this definition"></a></dt>
+<dd><p>Question 8: run SQL_Q8 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q9">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q9</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q9"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q9" title="Link to this definition"></a></dt>
+<dd><p>Question 9: run SQL_Q9 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q10">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q10</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q10"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q10" title="Link to this definition"></a></dt>
+<dd><p>Question 10: run SQL_Q10 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.answer_q11">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">answer_q11</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#answer_q11"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.answer_q11" title="Link to this definition"></a></dt>
+<dd><p>Question 11: run SQL_Q11 and format the result as an Answer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cur</strong> (<em>Cursor</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="query_data.run_all">
 <span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">run_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conn</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#run_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.run_all" title="Link to this definition"></a></dt>
 <dd><p>Run every question inside one read-only transaction (a consistent snapshot).</p>
@@ -344,6 +527,34 @@ query_results.pdf, so the PDF always shows exactly what this file runs.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>list[<a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.print_answers">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">print_answers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">answers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#print_answers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.print_answers" title="Link to this definition"></a></dt>
+<dd><p>Print answers as plain text under a title (the console output of this module).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>answers</strong> (<em>list</em><em>[</em><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a><em>]</em>)</p></li>
+<li><p><strong>title</strong> (<em>str</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.main">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.main" title="Link to this definition"></a></dt>
+<dd><p>Console entry point: print all eleven answers; returns 0, 2 (cannot connect) or 3 (query failed).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
 </dd>
 </dl>
 </dd></dl>
@@ -358,11 +569,11 @@ func.count(), func.avg(), and_() / or_() and a Session.  No handwritten SQL
 strings and no database-driver calls appear in this file.  The matching rules, valid score
 ranges and formatting come from analysis_common.py, the same definitions
 query_data.py uses, so equivalent questions give identical answers.</p>
-<dl class="simple">
-<dt>Console usage::</dt><dd><p>python orm_queries.py          # Questions 1, 4, 5, 8, 9 and original Question 10
-python orm_queries.py –all    # all eleven questions (what the Flask page shows)</p>
-</dd>
-</dl>
+<p>Console usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python orm_queries.py          # Questions 1, 4, 5, 8, 9 and original Question 10
+python orm_queries.py --all    # all eleven questions (what the Flask page shows)
+</pre></div>
+</div>
 <dl class="py class">
 <dt class="sig sig-object py" id="orm_queries.OrmAnswer">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">OrmAnswer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">number</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">question</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lines=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">columns=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table=&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#OrmAnswer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.OrmAnswer" title="Link to this definition"></a></dt>
@@ -377,6 +588,160 @@ python orm_queries.py –all    # all eleven questions (what the Flask page show
 <li><p><strong>columns</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>)</p></li>
 <li><p><strong>table</strong> (<em>list</em><em>[</em><em>list</em><em>[</em><em>str</em><em>]</em><em>]</em>)</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q1_fall_2026_count">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q1_fall_2026_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q1_fall_2026_count"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q1_fall_2026_count" title="Link to this definition"></a></dt>
+<dd><p>Question 1: the number of Fall 2026 entries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q2_percent_international">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q2_percent_international</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q2_percent_international"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q2_percent_international" title="Link to this definition"></a></dt>
+<dd><p>Question 2: (international, classified, percent international) among entries with a nationality.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[int, int, <em>Decimal</em> | None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q3_average_scores">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q3_average_scores</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q3_average_scores"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q3_average_scores" title="Link to this definition"></a></dt>
+<dd><p>Question 3: {metric: (average on the official scale, number of values)} for GPA and the GRE scores.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, tuple[<em>Decimal</em> | None, int]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q4_american_fall_2026_gpa">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q4_american_fall_2026_gpa</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q4_american_fall_2026_gpa"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q4_american_fall_2026_gpa" title="Link to this definition"></a></dt>
+<dd><p>Question 4: (average GPA, number of GPAs) of American Fall 2026 applicants.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[<em>Decimal</em> | None, int]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q5_fall_2025_acceptance">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q5_fall_2025_acceptance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q5_fall_2025_acceptance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q5_fall_2025_acceptance" title="Link to this definition"></a></dt>
+<dd><p>Question 5: (accepted, all, acceptance percent) for Fall 2025 entries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[int, int, <em>Decimal</em> | None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q6_accepted_fall_2026_gpa">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q6_accepted_fall_2026_gpa</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q6_accepted_fall_2026_gpa"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q6_accepted_fall_2026_gpa" title="Link to this definition"></a></dt>
+<dd><p>Question 6: (average GPA, number of GPAs) of accepted Fall 2026 applicants.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[<em>Decimal</em> | None, int]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q7_jhu_cs_masters">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q7_jhu_cs_masters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q7_jhu_cs_masters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q7_jhu_cs_masters" title="Link to this definition"></a></dt>
+<dd><p>Question 7: the number of Johns Hopkins Computer Science master’s entries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q8_accepted_cs_phd_original">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q8_accepted_cs_phd_original</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q8_accepted_cs_phd_original"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q8_accepted_cs_phd_original" title="Link to this definition"></a></dt>
+<dd><p>Question 8: accepted Fall 2026 CS PhD entries at the four schools, from the original fields.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q9_accepted_cs_phd_llm">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q9_accepted_cs_phd_llm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q9_accepted_cs_phd_llm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q9_accepted_cs_phd_llm" title="Link to this definition"></a></dt>
+<dd><p>Question 9: (original-field count, LLM-field count) for the Question 8 selection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[int, int]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q10_degree_comparison">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q10_degree_comparison</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q10_degree_comparison"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q10_degree_comparison" title="Link to this definition"></a></dt>
+<dd><p>Question 10: (degree, entries, acceptances, percent, average accepted GPA) per degree with 100+ Fall 2026 entries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[tuple]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.q11_top_universities">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q11_top_universities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q11_top_universities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q11_top_universities" title="Link to this definition"></a></dt>
+<dd><p>Question 11: (university, entries, acceptances, percent) for the ten LLM-named schools with the most Fall 2026 entries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[tuple]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -423,6 +788,20 @@ python orm_queries.py –all    # all eleven questions (what the Flask page show
 </dl>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="orm_queries.main">
+<span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.main" title="Link to this definition"></a></dt>
+<dd><p>Console entry point: print the required ORM questions (all eleven with <code class="docutils literal notranslate"><span class="pre">--all</span></code>); returns the exit code.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 <section id="module-build_query_results">
 <span id="query-results-report"></span><h2>Query-results report<a class="headerlink" href="#module-build_query_results" title="Link to this heading"></a></h2>
@@ -432,10 +811,21 @@ python orm_queries.py –all    # all eleven questions (what the Flask page show
 HTML report with, for each question: the question in words, the result, the
 exact SQL that query_data.py executes, and an explanation.  Print the HTML to
 PDF with any browser (File &gt; Print &gt; Save as PDF), or headless Chrome:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">build_query_results</span><span class="o">.</span><span class="n">py</span>
-<span class="n">google</span><span class="o">-</span><span class="n">chrome</span> <span class="o">--</span><span class="n">headless</span> <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">pdf</span><span class="o">-</span><span class="n">header</span><span class="o">-</span><span class="n">footer</span> <span class="o">--</span><span class="nb">print</span><span class="o">-</span><span class="n">to</span><span class="o">-</span><span class="n">pdf</span><span class="o">=</span><span class="n">query_results</span><span class="o">.</span><span class="n">pdf</span> <span class="n">query_results</span><span class="o">.</span><span class="n">html</span>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python build_query_results.py
+google-chrome --headless --no-pdf-header-footer --print-to-pdf=query_results.pdf query_results.html
 </pre></div>
 </div>
+<dl class="py function">
+<dt class="sig sig-object py" id="build_query_results.main">
+<span class="sig-prename descclassname"><span class="pre">build_query_results.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/build_query_results.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#build_query_results.main" title="Link to this definition"></a></dt>
+<dd><p>Command line: write query_results.html; returns 0, 2 (cannot connect) or 3 (query failed).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 </section>
 

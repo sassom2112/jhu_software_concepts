@@ -23,7 +23,8 @@ What the service does
 Requirements
 ------------
 
-* Python 3.11 (3.10 or newer works). The CI runs 3.11.
+* Python 3.11. The application and the tests also run on 3.10; building
+  the documentation (Sphinx 8) needs 3.11 or newer. The CI runs 3.11.
 * PostgreSQL 13 or newer. Development used PostgreSQL 17 in Docker.
 * Linux, macOS or WSL. The commands below use a POSIX shell.
 
@@ -66,7 +67,7 @@ Environment variables
 No password or connection string is stored in the repository. Every program,
 whether psycopg or SQLAlchemy, reads the connection from the environment
 through ``db_config.get_database_url()``. The table below lists every variable
-the code reads. ``.env.example`` in the module folder shows the same names.
+the code reads. ``.env.example`` in the module folder lists them, ready to ``source``.
 
 .. list-table::
    :header-rows: 1

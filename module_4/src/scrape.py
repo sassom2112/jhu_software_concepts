@@ -26,6 +26,7 @@ is retried only a couple of times, slowly.  Re-running the script later
 resumes from the saved checkpoint.
 
 Public API used by clean.py and the instructor's tooling::
+
     GradCafeScraper.scrape_data()  -> list[dict]
     save_data(entries, path)       -> None
     load_data(path)                -> list[dict]

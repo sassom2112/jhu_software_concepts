@@ -9,6 +9,7 @@
   <title>Testing guide &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
@@ -314,9 +315,9 @@ lets every button test run the real routes against fakes.</p></li>
 <li><p><strong>Busy state without waiting.</strong> <code class="docutils literal notranslate"><span class="pre">app.pull_state.try_start()</span></code> puts the app
 in the <em>pull running</em> state directly. The test then checks the 409s, and
 <code class="docutils literal notranslate"><span class="pre">finish()</span></code> ends it.</p></li>
-<li><p><strong>No network.</strong> Every scraper test uses <code class="docutils literal notranslate"><span class="pre">fake_site</span></code>. The scraper tests
-also pass inside a network namespace with no network at all
-(<code class="docutils literal notranslate"><span class="pre">unshare</span> <span class="pre">-rn</span></code>).</p></li>
+<li><p><strong>No network.</strong> Every scraper test that would make a request uses
+<code class="docutils literal notranslate"><span class="pre">fake_site</span></code>, and the parsing tests make none. The scraper tests also pass
+inside a network namespace with no network at all (<code class="docutils literal notranslate"><span class="pre">unshare</span> <span class="pre">-rn</span></code>).</p></li>
 <li><p><strong>monkeypatch / runpy / capsys / caplog / tmp_path.</strong>
 <code class="docutils literal notranslate"><span class="pre">monkeypatch.setattr</span></code> / <code class="docutils literal notranslate"><span class="pre">setenv</span></code> swap a class, a constant or an
 environment variable for one test. <code class="docutils literal notranslate"><span class="pre">runpy.run_module(name,</span>
@@ -338,12 +339,12 @@ let a change through were strengthened.</p></li>
 <h2>Continuous integration<a class="headerlink" href="#continuous-integration" title="Link to this heading"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">.github/workflows/tests.yml</span></code> (at the repository root, where GitHub runs it,
 with an identical copy at <code class="docutils literal notranslate"><span class="pre">module_4/.github/workflows/tests.yml</span></code>) runs on
-every push that touches <code class="docutils literal notranslate"><span class="pre">module_4</span></code>:</p>
+every push that changes <code class="docutils literal notranslate"><span class="pre">module_4</span></code> (or the workflow file, or <code class="docutils literal notranslate"><span class="pre">.readthedocs.yaml</span></code>):</p>
 <ol class="arabic simple">
 <li><p>It starts a <code class="docutils literal notranslate"><span class="pre">postgres:17</span></code> service container with a <code class="docutils literal notranslate"><span class="pre">gradcafe_test</span></code>
 database and <code class="docutils literal notranslate"><span class="pre">trust</span></code> authentication, so no password is needed or stored.</p></li>
-<li><p>It installs Python 3.11 and <code class="docutils literal notranslate"><span class="pre">module_4/requirements.txt</span></code>.</p></li>
 <li><p>It checks that the two copies of the workflow are identical.</p></li>
+<li><p>It installs Python 3.11 and <code class="docutils literal notranslate"><span class="pre">module_4/requirements.txt</span></code>.</p></li>
 <li><p>It runs the same pytest command as above, from the repository root, with
 <code class="docutils literal notranslate"><span class="pre">DATABASE_URL=postgresql://gradcafe&#64;localhost:5432/gradcafe_test</span></code>, and
 fails below 100% coverage.</p></li>
@@ -353,8 +354,8 @@ fails below 100% coverage.</p></li>
 <section id="adding-a-test">
 <h2>Adding a test<a class="headerlink" href="#adding-a-test" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>Name the file <code class="docutils literal notranslate"><span class="pre">test_*.py</span></code> and put it in <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code>. Otherwise
-pytest will not collect it.</p></li>
+<li><p>Name the file <code class="docutils literal notranslate"><span class="pre">test_*.py</span></code> (pytest also accepts <code class="docutils literal notranslate"><span class="pre">*_test.py</span></code>) and put
+it in <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code>, where <code class="docutils literal notranslate"><span class="pre">conftest.py</span></code> provides the fixtures.</p></li>
 <li><p>Mark every test with one of the five markers, or set <code class="docutils literal notranslate"><span class="pre">pytestmark</span></code> for the
 whole file.</p></li>
 <li><p>Use <code class="docutils literal notranslate"><span class="pre">client</span></code> for the page and buttons, <code class="docutils literal notranslate"><span class="pre">db_conn</span></code> / <code class="docutils literal notranslate"><span class="pre">db_client</span></code> for

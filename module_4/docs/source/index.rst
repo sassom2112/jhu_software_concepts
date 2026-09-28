@@ -11,7 +11,7 @@ results.
 
 Module 4 adds an automated pytest suite with 100% line coverage of
 ``module_4/src``, a GitHub Actions workflow that runs it against a real
-PostgreSQL on every push, and this documentation.
+PostgreSQL on every push that changes ``module_4``, and this documentation.
 
 .. toctree::
    :maxdepth: 2

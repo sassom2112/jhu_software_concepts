@@ -9,6 +9,7 @@
   <title>ETL layer &mdash; Grad Café Analytics</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -77,6 +78,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#load_data.load_records"><code class="docutils literal notranslate"><span class="pre">load_records()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#load_data.count_rows"><code class="docutils literal notranslate"><span class="pre">count_rows()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#load_data.fetch_applicants"><code class="docutils literal notranslate"><span class="pre">fetch_applicants()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -139,12 +141,12 @@ raw entries to JSON and hand them to clean.py.</p></li>
 Cloudflare challenge page stops the run immediately; a 5xx or a network error
 is retried only a couple of times, slowly.  Re-running the script later
 resumes from the saved checkpoint.</p>
-<dl class="simple">
-<dt>Public API used by clean.py and the instructor’s tooling::</dt><dd><p>GradCafeScraper.scrape_data()  -&gt; list[dict]
+<p>Public API used by clean.py and the instructor’s tooling:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>GradCafeScraper.scrape_data()  -&gt; list[dict]
 save_data(entries, path)       -&gt; None
-load_data(path)                -&gt; list[dict]</p>
-</dd>
-</dl>
+load_data(path)                -&gt; list[dict]
+</pre></div>
+</div>
 <dl class="py exception">
 <dt class="sig sig-object py" id="scrape.ScrapeBlockedError">
 <em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">ScrapeBlockedError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retryable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#ScrapeBlockedError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.ScrapeBlockedError" title="Link to this definition"></a></dt>
@@ -337,11 +339,11 @@ value can be traced back to what the website showed.</p>
 </dd>
 </dl>
 <p>Missing or unavailable values are always represented as None (JSON null).</p>
-<dl class="simple">
-<dt>Usage::</dt><dd><p>python clean.py                      # data/raw_entries.json[.gz] -&gt; applicant_data.json
-python clean.py –input X –output Y</p>
-</dd>
-</dl>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python clean.py                      # data/raw_entries.json[.gz] -&gt; applicant_data.json
+python clean.py --input X --output Y
+</pre></div>
+</div>
 <dl class="py function">
 <dt class="sig sig-object py" id="clean.clean_data">
 <span class="sig-prename descclassname"><span class="pre">clean.</span></span><span class="sig-name descname"><span class="pre">clean_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_entries</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clean.html#clean_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clean.clean_data" title="Link to this definition"></a></dt>
@@ -393,11 +395,13 @@ store) are removed from strings.</p></li>
 <li><p>The whole load is one transaction: it either completes or changes nothing.</p></li>
 </ul>
 </dd>
-<dt>Usage::</dt><dd><p>python load_data.py                                   # llm_extend_applicant_data.json
-python load_data.py –file applicant_data.json        # works without LLM columns too
-python load_data.py –reset                           # drop and recreate the table first</p>
-</dd>
 </dl>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python load_data.py                                   # llm_extend_applicant_data.json
+python load_data.py --file applicant_data.json        # works without LLM columns too
+python load_data.py --reset                           # drop and recreate the table first
+</pre></div>
+</div>
 <p>Connection settings come from the environment (see db_config.py); no password
 is stored in this repository.</p>
 <dl class="py function">
@@ -490,6 +494,20 @@ modified.  The caller controls the transaction.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.main">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.main" title="Link to this definition"></a></dt>
+<dd><p>Command line: load a JSON file; returns 0, 1 (unreadable input), 2 (cannot connect) or 3 (rolled back).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
 </dd>
 </dl>
 </dd></dl>

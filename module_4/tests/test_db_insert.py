@@ -28,6 +28,7 @@ def test_table_starts_empty(db_conn):
 @pytest.mark.db
 def test_pull_data_inserts_rows_with_required_fields(db_client, db_conn, fake_scraper, raw_entries):
     fake_scraper.rows = raw_entries
+    assert count_rows(db_conn) == 0                  # before: the target table is empty
 
     response = db_client.post("/pull-data")
 
