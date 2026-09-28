@@ -116,10 +116,10 @@ def main() -> int:
         print(f"error: query failed: {err}", file=sys.stderr)
         return 3
     body = "\n".join(_answer_html(a) for a in answers)
-    document = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Module 3 SQL Query Results</title>
+    document = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Module 4 SQL Query Results</title>
 <style>{CSS}</style></head><body>
 <h1>Grad Café SQL Analysis: Query Results</h1>
-<p class="sub">JHU EN.605.256 Modern Software Concepts in Python · Module 3 · generated {datetime.now():%B %d, %Y %H:%M}</p>
+<p class="sub">JHU EN.605.256 Modern Software Concepts in Python · Module 4 · generated {datetime.now():%B %d, %Y %H:%M}</p>
 <div class="meta">{notes}
 <p><b>Matching conventions:</b> text comparisons ignore capitalization and surrounding spaces; an acceptance is a status
 starting with "accept"; regular expressions use PostgreSQL's ~* (case-insensitive) operator, where \\m and \\M mark word boundaries.</p></div>
