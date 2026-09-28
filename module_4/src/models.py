@@ -12,7 +12,7 @@ Engine and Session:
     an engine does not open a connection; connections are pooled, checked
     with pool_pre_ping so a restarted database does not break the web app,
     and give up after a 10-second connect timeout.
-  * `SessionLocal` is a sessionmaker; use it as a context manager:
+  * `SessionLocal` is a sessionmaker; use it as a context manager::
 
         from models import Applicant, SessionLocal
         with SessionLocal() as session:

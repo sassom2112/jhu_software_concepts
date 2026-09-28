@@ -9,7 +9,7 @@ strings and no database-driver calls appear in this file.  The matching rules, v
 ranges and formatting come from analysis_common.py, the same definitions
 query_data.py uses, so equivalent questions give identical answers.
 
-Console usage:
+Console usage::
     python orm_queries.py          # Questions 1, 4, 5, 8, 9 and original Question 10
     python orm_queries.py --all    # all eleven questions (what the Flask page shows)
 """

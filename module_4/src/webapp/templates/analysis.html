@@ -96,16 +96,19 @@
       button.disabled = true;
       button.textContent = "Pulling…";
       const { status, body } = await post("{{ url_for('analysis.pull_data') }}");
+      if (status === 200 && body.ok) {
+        // Leave the result on screen briefly, then reload so the analysis includes the new rows.
+        showMessage(`Pull Data finished: ${body.inserted} new row(s) added. Refreshing the results…`, "success");
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      }
       if (status === 409) {
         showMessage("Pull Data is already running; this click did nothing.", "warning");
-      } else if (status === 200 && body.ok) {
-        showMessage(`Pull Data finished: ${body.inserted} new row(s) added.`, "success");
       } else {
         showMessage("Pull Data failed: " + (body.error || "unknown error"), "error");
       }
       button.disabled = false;
       button.textContent = "Pull Data";
-      window.location.reload();
     });
     document.getElementById("update-analysis-btn").addEventListener("click", async () => {
       const { status } = await post("{{ url_for('analysis.update_analysis') }}");

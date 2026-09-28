@@ -1,0 +1,504 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clean &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f46eefca"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../testing.html">Testing guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">clean</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for clean</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""</span>
+<span class="sd">clean.py - Convert raw Grad Cafe listing entries into structured records.</span>
+
+<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 2.</span>
+
+<span class="sd">Input : the raw entry dicts produced by scrape.py (visible listing text plus</span>
+<span class="sd">        the page's own JSON record of the entry when it was available).</span>
+<span class="sd">Output: one dict per applicant with typed, consistently named fields.  Every</span>
+<span class="sd">        raw string is carried along unchanged under the "raw" key so any cleaned</span>
+<span class="sd">        value can be traced back to what the website showed.</span>
+
+<span class="sd">Missing or unavailable values are always represented as None (JSON null).</span>
+
+<span class="sd">Usage::</span>
+<span class="sd">    python clean.py                      # data/raw_entries.json[.gz] -&gt; applicant_data.json</span>
+<span class="sd">    python clean.py --input X --output Y</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span><span class="p">,</span> <span class="n">datetime</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">scrape</span><span class="w"> </span><span class="kn">import</span> <span class="n">_local_name</span><span class="p">,</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">save_data</span>
+
+<span class="c1"># The module folder (module_4/, the parent of src/): the command line reads and writes its</span>
+<span class="c1"># data files there, next to src/ rather than inside it, as in Modules 2 and 3.</span>
+<span class="n">HERE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span>
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#        Patterns for the badge ("tag") texts shown under each listing row    #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+<span class="n">TERM_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^(Fall|Spring|Summer|Winter)\s+(\d</span><span class="si">{4}</span><span class="s2">)$"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+<span class="c1"># The site offers three citizenship values; "Other" is a real answer, not a gap.</span>
+<span class="n">APPLICANT_TYPE_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^(International|American|Other)$"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+<span class="n">GRE_AW_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^GRE\s*AW\s*:?\s*([\d.]+)$"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+<span class="n">GRE_V_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^GRE\s*V(?:erbal)?\s*:?\s*([\d.]+)$"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+<span class="n">GRE_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^GRE\s*(?:General|Q(?:uant)?)?\s*:?\s*([\d.]+)$"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+<span class="n">GPA_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^GPA\s*:?\s*([\d.]+)$"</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+
+<span class="c1"># "Accepted on Sep 09", "Rejected on 12 Mar", "Wait listed on Sep 10",</span>
+<span class="c1"># "Interview on Jul 10", "Other"</span>
+<span class="n">DECISION_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+    <span class="sa">r</span><span class="s2">"^(?P&lt;status&gt;Accepted|Rejected|Wait\s*listed|Waitlisted|Interview(?:ed)?|Other)"</span>
+    <span class="sa">r</span><span class="s2">"(?:\s+on\s+(?P&lt;date&gt;.+))?$"</span><span class="p">,</span>
+    <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">STATUS_LABELS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"accepted"</span><span class="p">:</span> <span class="s2">"Accepted"</span><span class="p">,</span>
+    <span class="s2">"rejected"</span><span class="p">:</span> <span class="s2">"Rejected"</span><span class="p">,</span>
+    <span class="s2">"waitlisted"</span><span class="p">:</span> <span class="s2">"Waitlisted"</span><span class="p">,</span>
+    <span class="s2">"wait listed"</span><span class="p">:</span> <span class="s2">"Waitlisted"</span><span class="p">,</span>
+    <span class="s2">"interview"</span><span class="p">:</span> <span class="s2">"Interview"</span><span class="p">,</span>
+    <span class="s2">"interviewed"</span><span class="p">:</span> <span class="s2">"Interview"</span><span class="p">,</span>
+    <span class="s2">"other"</span><span class="p">:</span> <span class="s2">"Other"</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># For a few days in March 2026 the site stored an unset citizenship field as</span>
+<span class="c1"># the literal "0" and rendered it as a badge; it carries no information.</span>
+<span class="n">PLACEHOLDER_BADGES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"0"</span><span class="p">}</span>
+
+<span class="n">DATE_ADDED_FORMATS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"%b </span><span class="si">%d</span><span class="s2">, %Y"</span><span class="p">,</span> <span class="s2">"%B </span><span class="si">%d</span><span class="s2">, %Y"</span><span class="p">,</span> <span class="s2">"</span><span class="si">%d</span><span class="s2"> %b %Y"</span><span class="p">,</span> <span class="s2">"%Y-%m-</span><span class="si">%d</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">DECISION_DATE_FORMATS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"%b </span><span class="si">%d</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"</span><span class="si">%d</span><span class="s2"> %b"</span><span class="p">,</span> <span class="s2">"%B </span><span class="si">%d</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"</span><span class="si">%d</span><span class="s2"> %B"</span><span class="p">)</span>  <span class="c1"># year is not shown on the badge</span>
+<span class="n">LEAP_YEAR_ANCHOR</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c1"># lets "Feb 29" parse before the real year is substituted</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                                Public API                                   #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+
+<div class="viewcode-block" id="clean_data">
+<a class="viewcode-back" href="../api/etl.html#clean.clean_data">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">clean_data</span><span class="p">(</span><span class="n">raw_entries</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Convert every raw listing entry into a structured applicant record."""</span>
+    <span class="n">cleaned</span> <span class="o">=</span> <span class="p">[</span><span class="n">_clean_entry</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">raw_entries</span><span class="p">]</span>
+    <span class="n">cleaned</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">record</span><span class="p">:</span> <span class="n">record</span><span class="p">[</span><span class="s2">"result_id"</span><span class="p">]</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cleaned</span></div>
+
+
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                             Per-entry cleaning                              #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_clean_entry</span><span class="p">(</span><span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build one structured record from a raw listing entry.</span>
+
+<span class="sd">    The visible listing text is the primary source.  The page's embedded JSON</span>
+<span class="sd">    record (``listing_json``, when the scraper captured it) supplies the full</span>
+<span class="sd">    decision date and fills any field the badges did not show.</span>
+<span class="sd">    """</span>
+    <span class="n">listing</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"listing_json"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+
+    <span class="n">university</span> <span class="o">=</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"school_text"</span><span class="p">))</span> <span class="ow">or</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"school"</span><span class="p">))</span>
+    <span class="n">program_name</span> <span class="o">=</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"program_text"</span><span class="p">))</span> <span class="ow">or</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"program"</span><span class="p">))</span>
+    <span class="n">degree</span> <span class="o">=</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"degree_text"</span><span class="p">))</span> <span class="ow">or</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"level"</span><span class="p">))</span>
+    <span class="n">date_added_text</span> <span class="o">=</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"date_added_text"</span><span class="p">))</span> <span class="ow">or</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"added_on_label"</span><span class="p">))</span>
+    <span class="n">decision_text</span> <span class="o">=</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"decision_text"</span><span class="p">))</span> <span class="ow">or</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"decision_label"</span><span class="p">))</span>
+    <span class="n">comment</span> <span class="o">=</span> <span class="n">_clean_text</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"comment_text"</span><span class="p">),</span> <span class="n">keep_newlines</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_clean_text</span><span class="p">(</span>
+        <span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"notes"</span><span class="p">),</span> <span class="n">keep_newlines</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+    <span class="n">tags</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">(</span><span class="n">_clean_text</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span> <span class="k">for</span> <span class="n">tag</span> <span class="ow">in</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"tags_text"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">t</span><span class="p">]</span>
+
+    <span class="n">date_added</span> <span class="o">=</span> <span class="n">_parse_date_added</span><span class="p">(</span><span class="n">date_added_text</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_parse_iso_date</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"created_at"</span><span class="p">))</span>
+    <span class="n">status</span><span class="p">,</span> <span class="n">inferred_decision_date</span> <span class="o">=</span> <span class="n">_parse_decision</span><span class="p">(</span><span class="n">decision_text</span><span class="p">,</span> <span class="n">date_added</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="n">_normalize_status</span><span class="p">(</span><span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"decision"</span><span class="p">)))</span>
+
+    <span class="c1"># Exact decision date from the page payload beats the month/day badge.</span>
+    <span class="n">exact_decision_date</span> <span class="o">=</span> <span class="n">_parse_iso_date</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"date_of_notification"</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">exact_decision_date</span><span class="p">:</span>
+        <span class="n">decision_date</span><span class="p">,</span> <span class="n">decision_date_source</span> <span class="o">=</span> <span class="n">exact_decision_date</span><span class="p">,</span> <span class="s2">"site_json"</span>
+    <span class="k">elif</span> <span class="n">inferred_decision_date</span><span class="p">:</span>
+        <span class="n">decision_date</span><span class="p">,</span> <span class="n">decision_date_source</span> <span class="o">=</span> <span class="n">inferred_decision_date</span><span class="p">,</span> <span class="s2">"badge_year_inferred"</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">decision_date</span><span class="p">,</span> <span class="n">decision_date_source</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">_classify_tags</span><span class="p">(</span><span class="n">tags</span><span class="p">)</span>
+    <span class="n">term</span> <span class="o">=</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">"term"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">_parse_term</span><span class="p">(</span><span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"season"</span><span class="p">)))</span>
+    <span class="n">applicant_type</span> <span class="o">=</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">"applicant_type"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">_parse_applicant_type</span><span class="p">(</span><span class="n">_clean_text</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"status"</span><span class="p">)))</span>
+    <span class="n">gpa</span> <span class="o">=</span> <span class="n">_first_present</span><span class="p">(</span><span class="n">metrics</span><span class="p">[</span><span class="s2">"gpa"</span><span class="p">],</span> <span class="n">_to_number_or_none</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ugpa"</span><span class="p">)))</span>
+    <span class="n">gre</span> <span class="o">=</span> <span class="n">_first_present</span><span class="p">(</span><span class="n">metrics</span><span class="p">[</span><span class="s2">"gre"</span><span class="p">],</span> <span class="n">_to_number_or_none</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"greq"</span><span class="p">)))</span>
+    <span class="n">gre_verbal</span> <span class="o">=</span> <span class="n">_first_present</span><span class="p">(</span><span class="n">metrics</span><span class="p">[</span><span class="s2">"gre_verbal"</span><span class="p">],</span> <span class="n">_to_number_or_none</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"grev"</span><span class="p">)))</span>
+    <span class="n">gre_aw</span> <span class="o">=</span> <span class="n">_first_present</span><span class="p">(</span><span class="n">metrics</span><span class="p">[</span><span class="s2">"gre_analytical_writing"</span><span class="p">],</span> <span class="n">_to_number_or_none</span><span class="p">(</span><span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"grew"</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"result_id"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"result_id"</span><span class="p">),</span>
+        <span class="s2">"url"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">),</span>
+        <span class="c1"># "program" mirrors the legacy Grad Cafe listing text ("Program, University")</span>
+        <span class="c1"># that the LLM standardizer expects; the two parts are also kept separately.</span>
+        <span class="s2">"program"</span><span class="p">:</span> <span class="n">_join_program</span><span class="p">(</span><span class="n">program_name</span><span class="p">,</span> <span class="n">university</span><span class="p">),</span>
+        <span class="s2">"program_name"</span><span class="p">:</span> <span class="n">program_name</span><span class="p">,</span>
+        <span class="s2">"university"</span><span class="p">:</span> <span class="n">university</span><span class="p">,</span>
+        <span class="s2">"degree"</span><span class="p">:</span> <span class="n">degree</span><span class="p">,</span>
+        <span class="s2">"date_added"</span><span class="p">:</span> <span class="n">date_added</span><span class="p">,</span>
+        <span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span>
+        <span class="s2">"decision_date"</span><span class="p">:</span> <span class="n">decision_date</span><span class="p">,</span>
+        <span class="s2">"decision_date_source"</span><span class="p">:</span> <span class="n">decision_date_source</span><span class="p">,</span>
+        <span class="s2">"term"</span><span class="p">:</span> <span class="n">term</span><span class="p">,</span>
+        <span class="s2">"us_or_international"</span><span class="p">:</span> <span class="n">applicant_type</span><span class="p">,</span>
+        <span class="s2">"gpa"</span><span class="p">:</span> <span class="n">gpa</span><span class="p">,</span>
+        <span class="s2">"gre"</span><span class="p">:</span> <span class="n">gre</span><span class="p">,</span>
+        <span class="s2">"gre_v"</span><span class="p">:</span> <span class="n">gre_verbal</span><span class="p">,</span>
+        <span class="s2">"gre_aw"</span><span class="p">:</span> <span class="n">gre_aw</span><span class="p">,</span>
+        <span class="s2">"comments"</span><span class="p">:</span> <span class="n">comment</span><span class="p">,</span>
+        <span class="s2">"other_tags"</span><span class="p">:</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">"other_tags"</span><span class="p">],</span>
+        <span class="s2">"raw"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"school"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"school_text"</span><span class="p">),</span>
+            <span class="s2">"program"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"program_text"</span><span class="p">),</span>
+            <span class="s2">"degree"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"degree_text"</span><span class="p">),</span>
+            <span class="s2">"date_added"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"date_added_text"</span><span class="p">),</span>
+            <span class="s2">"decision"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"decision_text"</span><span class="p">),</span>
+            <span class="s2">"tags"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"tags_text"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]),</span>
+            <span class="s2">"comment"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"comment_text"</span><span class="p">),</span>
+            <span class="s2">"date_of_notification"</span><span class="p">:</span> <span class="n">listing</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"date_of_notification"</span><span class="p">),</span>
+            <span class="s2">"scraped_at"</span><span class="p">:</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"scraped_at"</span><span class="p">),</span>
+        <span class="p">},</span>
+    <span class="p">}</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                              Private helpers                                #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_clean_text</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">keep_newlines</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Collapse whitespace; never rewrite characters.</span>
+
+<span class="sd">    The scraper already produced entity-decoded, tag-free visible text with</span>
+<span class="sd">    BeautifulSoup's get_text(), so decoding or tag-stripping again here could</span>
+<span class="sd">    only damage applicant text that legitimately contains '&lt;', '&gt;' or '&amp;'.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">keep_newlines</span><span class="p">:</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()]</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">line</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span> <span class="k">if</span> <span class="n">line</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">text</span> <span class="ow">or</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_join_program</span><span class="p">(</span><span class="n">program_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">university</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""'Program, University' for the LLM standardizer; None unless both are known."""</span>
+    <span class="k">if</span> <span class="n">program_name</span> <span class="ow">and</span> <span class="n">university</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">program_name</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">university</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_first_present</span><span class="p">(</span><span class="o">*</span><span class="n">values</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the first value that is not None (all None -&gt; None)."""</span>
+    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_iso_date</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""'2026-07-10T00:00:00.000000Z' or '2026-07-10' -&gt; '2026-07-10'."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">date</span><span class="o">.</span><span class="n">fromisoformat</span><span class="p">(</span><span class="n">value</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_term</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""'fall 2026' -&gt; 'Fall 2026'; anything else -&gt; None."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">match</span> <span class="o">=</span> <span class="n">TERM_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">title</span><span class="p">()</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">match</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_applicant_type</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""'International' / 'American' / 'Other' (any case) -&gt; canonical label; else None."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">text</span><span class="o">.</span><span class="n">title</span><span class="p">()</span> <span class="k">if</span> <span class="n">APPLICANT_TYPE_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_to_number_or_none</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Numeric conversion for JSON payload metrics (ugpa, greq, grev, grew).</span>
+
+<span class="sd">    The site stores "not provided" as 0 / "0.00" and hides such badges, so a</span>
+<span class="sd">    zero from the payload is treated as missing rather than as a real score.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">value</span> <span class="o">==</span> <span class="s2">""</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="n">_to_number</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+    <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">number</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">number</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_date_added</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""'Sep 11, 2026' -&gt; '2026-09-11'.  Unknown formats return None."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">fmt</span> <span class="ow">in</span> <span class="n">DATE_ADDED_FORMATS</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">fmt</span><span class="p">)</span><span class="o">.</span><span class="n">date</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">continue</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_status</span><span class="p">(</span><span class="n">status_text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Map badge wording ('Wait listed', 'interviewed', ...) to a canonical label."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">status_text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">status_text</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">STATUS_LABELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">status_text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">())</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_decision</span><span class="p">(</span><span class="n">decision_text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">date_added</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Split 'Accepted on Sep 09' into ('Accepted', '2026-09-09'); 'Other' -&gt; ('Other', None)."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">decision_text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="n">match</span> <span class="o">=</span> <span class="n">DECISION_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">decision_text</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">match</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_normalize_status</span><span class="p">(</span><span class="n">decision_text</span><span class="p">),</span> <span class="kc">None</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">_normalize_status</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">"status"</span><span class="p">))</span>
+    <span class="n">date_part</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">"date"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">date_part</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">status</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">status</span><span class="p">,</span> <span class="n">_resolve_decision_date</span><span class="p">(</span><span class="n">date_part</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">date_added</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_decision_date</span><span class="p">(</span><span class="n">month_day_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">date_added</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Turn the badge's month/day ('Sep 09') into a full ISO date.</span>
+
+<span class="sd">    The badge shows no year, so it is inferred from the 'date added' year: a</span>
+<span class="sd">    decision cannot be reported before it happened, so when the month/day</span>
+<span class="sd">    falls after the date-added month/day the decision is placed in the</span>
+<span class="sd">    previous year.  (clean.py prefers the exact date from the page JSON when</span>
+<span class="sd">    it is available; this is the fallback.)  A full date such as</span>
+<span class="sd">    'Sep 09, 2026' is accepted as-is.</span>
+<span class="sd">    """</span>
+    <span class="n">parsed</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">fmt</span> <span class="ow">in</span> <span class="n">DECISION_DATE_FORMATS</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># strptime defaults to year 1900, which rejects "Feb 29"; anchor</span>
+            <span class="c1"># to a leap year and substitute the inferred year below.</span>
+            <span class="n">parsed</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">LEAP_YEAR_ANCHOR</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">month_day_text</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"%Y </span><span class="si">{</span><span class="n">fmt</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="k">break</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">continue</span>
+    <span class="k">if</span> <span class="n">parsed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">fmt</span> <span class="ow">in</span> <span class="n">DATE_ADDED_FORMATS</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">month_day_text</span><span class="p">,</span> <span class="n">fmt</span><span class="p">)</span><span class="o">.</span><span class="n">date</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">date_added</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># no reference year available; leave the date unknown</span>
+    <span class="n">added</span> <span class="o">=</span> <span class="n">date</span><span class="o">.</span><span class="n">fromisoformat</span><span class="p">(</span><span class="n">date_added</span><span class="p">)</span>
+    <span class="n">year</span> <span class="o">=</span> <span class="n">added</span><span class="o">.</span><span class="n">year</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">parsed</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">parsed</span><span class="o">.</span><span class="n">day</span><span class="p">)</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">added</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">added</span><span class="o">.</span><span class="n">day</span><span class="p">):</span>
+        <span class="n">year</span> <span class="o">-=</span> <span class="mi">1</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">date</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="n">parsed</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">parsed</span><span class="o">.</span><span class="n">day</span><span class="p">)</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>  <span class="c1"># Feb 29 in a non-leap inferred year</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_to_number</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""'163' -&gt; 163, '3.40' -&gt; 3.4, '4.00' -&gt; 4.0 (float kept when the text has a decimal point); else None."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">is_integer</span><span class="p">()</span> <span class="ow">and</span> <span class="s2">"."</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">text</span> <span class="k">else</span> <span class="n">value</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_classify_tags</span><span class="p">(</span><span class="n">tags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Sort the badge texts into typed fields; unknown badges go to other_tags."""</span>
+    <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"term"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"applicant_type"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"gpa"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"gre"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"gre_verbal"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"gre_analytical_writing"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"other_tags"</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">tag</span> <span class="ow">in</span> <span class="n">tags</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tag</span> <span class="ow">in</span> <span class="n">PLACEHOLDER_BADGES</span><span class="p">:</span>
+            <span class="k">continue</span>  <span class="c1"># the site's rendering of an unset field; nothing to keep</span>
+        <span class="k">if</span> <span class="n">TERM_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"term"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_term</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">APPLICANT_TYPE_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"applicant_type"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_applicant_type</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">GRE_AW_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"gre_analytical_writing"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_number</span><span class="p">(</span><span class="n">GRE_AW_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">GRE_V_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"gre_verbal"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_number</span><span class="p">(</span><span class="n">GRE_V_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">GRE_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"gre"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_number</span><span class="p">(</span><span class="n">GRE_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">GPA_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"gpa"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_number</span><span class="p">(</span><span class="n">GPA_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="n">decision</span> <span class="o">:=</span> <span class="n">DECISION_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">tag</span><span class="p">))</span> <span class="ow">and</span> <span class="n">decision</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">"date"</span><span class="p">):</span>
+            <span class="k">continue</span>  <span class="c1"># a dated decision badge repeated in the tag row; already captured</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"other_tags"</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                                Command line                                 #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_default_raw_input</span><span class="p">(</span><span class="n">script_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""data/raw_entries.json if present, else the gzip copy that is kept in git."""</span>
+    <span class="n">plain</span> <span class="o">=</span> <span class="n">script_dir</span> <span class="o">/</span> <span class="s2">"data"</span> <span class="o">/</span> <span class="s2">"raw_entries.json"</span>
+    <span class="k">return</span> <span class="n">plain</span> <span class="k">if</span> <span class="n">plain</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="k">else</span> <span class="n">plain</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="n">plain</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">".gz"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../api/etl.html#clean.main">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read the raw entries, clean them, and write applicant_data.json."""</span>
+    <span class="n">script_dir</span> <span class="o">=</span> <span class="n">HERE</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Clean raw Grad Cafe entries into applicant_data.json"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--input"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s2">"raw entries file name inside data/ (default raw_entries.json, or its .gz copy)"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--output"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"applicant_data.json"</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s2">"cleaned JSON file name in the module folder (default applicant_data.json)"</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
+    <span class="c1"># Options name files in the module folder (bare names; see scrape._local_name).</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">input_path</span> <span class="o">=</span> <span class="n">script_dir</span> <span class="o">/</span> <span class="s2">"data"</span> <span class="o">/</span> <span class="n">_local_name</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">input</span><span class="p">)</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">input</span> <span class="k">else</span> <span class="n">_default_raw_input</span><span class="p">(</span><span class="n">script_dir</span><span class="p">)</span>
+        <span class="n">output_path</span> <span class="o">=</span> <span class="n">script_dir</span> <span class="o">/</span> <span class="n">_local_name</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"error: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">1</span>
+
+    <span class="n">raw_entries</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">(</span><span class="n">input_path</span><span class="p">)</span>
+    <span class="n">cleaned</span> <span class="o">=</span> <span class="n">clean_data</span><span class="p">(</span><span class="n">raw_entries</span><span class="p">)</span>
+    <span class="n">save_data</span><span class="p">(</span><span class="n">cleaned</span><span class="p">,</span> <span class="n">output_path</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cleaned </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">cleaned</span><span class="p">)</span><span class="si">}</span><span class="s2"> entries -&gt; </span><span class="si">{</span><span class="n">output_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="mi">0</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

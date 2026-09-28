@@ -8,7 +8,7 @@ and formats the numbers it gets back.  The same SQL text, question wording and
 explanations are reused by build_query_results.py to produce
 query_results.pdf, so the PDF always shows exactly what this file runs.
 
-Usage:
+Usage::
     python query_data.py
 
 Connection settings come from the environment (see db_config.py).

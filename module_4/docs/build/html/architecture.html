@@ -1,0 +1,302 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f46eefca"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Operational notes" href="operations.html" />
+    <link rel="prev" title="Overview and setup" href="overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview and setup</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#web-layer">Web layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#etl-layer">ETL layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#database-layer">Database layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-a-request-flows">How a request flows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-decisions">Design decisions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h1>
+<p>The service has three layers. Each has one job, and each talks only to the
+layer below it:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Browser
+  |  GET /analysis          POST /pull-data          POST /update-analysis
+  v
++-- Web layer (Flask) ------------------------------------------------------+
+|  webapp.create_app(scrape_fn, load_fn, query_fn)  - the application factory|
+|  webapp.routes    - the page and the two JSON button endpoints            |
+|  webapp.services  - PullState (the busy flag), default scrape/load        |
+|  templates/analysis.html - buttons, "Answer:" labels, results             |
++------------+-----------------------------------------+--------------------+
+             | SCRAPE_FN, LOAD_FN                      | QUERY_FN
+             v                                         v
++-- ETL layer -----------------------+   +-- Analysis ---------------------+
+|  scrape.py    -&gt; raw entries       |   |  orm_queries.get_analysis()     |
+|  clean.py     -&gt; records           |   |  query_data.py (same, raw SQL)  |
+|  load_data.py -&gt; INSERT ...        |   |  analysis_common.py (rules,     |
+|     ON CONFLICT (p_id) DO NOTHING  |   |    wording, 2-decimal format)   |
++----------------+-------------------+   +----------------+----------------+
+                 | psycopg 3                              | SQLAlchemy 2
+                 v                                        v
++-- Database layer --------------------------------------------------------+
+|  PostgreSQL table "applicants" (p_id INTEGER PRIMARY KEY, ...)          |
+|  db_config.py - DATABASE_URL / PG* variables -&gt; one connection setting   |
+|  models.py    - the Applicant ORM class mapped onto the same table       |
++--------------------------------------------------------------------------+
+</pre></div>
+</div>
+<section id="web-layer">
+<h2>Web layer<a class="headerlink" href="#web-layer" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">webapp.create_app()</span></code> is an application factory. It takes the three pieces
+of work the page depends on as keyword arguments:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">scrape_fn()</span></code>: fetch new raw entries. The default is
+<code class="docutils literal notranslate"><span class="pre">webapp.services.default_scrape_fn</span></code>, which reads the stored <code class="docutils literal notranslate"><span class="pre">p_id</span></code> values
+and asks <code class="docutils literal notranslate"><span class="pre">GradCafeScraper.scrape_new_entries</span></code> for anything newer.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">load_fn(raw_entries)</span></code>: store them and return how many were new. The
+default is <code class="docutils literal notranslate"><span class="pre">webapp.services.default_load_fn</span></code>, which runs <code class="docutils literal notranslate"><span class="pre">clean_data</span></code>
+and then <code class="docutils literal notranslate"><span class="pre">load_records</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">query_fn()</span></code>: return everything the page shows. The default is
+<code class="docutils literal notranslate"><span class="pre">orm_queries.get_analysis</span></code>.</p></li>
+</ul>
+<p>Production passes nothing and gets the real implementations. Tests pass fakes,
+which is how every button test runs without the network and, where it wants,
+without a database (see <a class="reference internal" href="testing.html"><span class="doc">Testing guide</span></a>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">webapp.routes</span></code> holds four routes: <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/</span></code> redirects to <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/analysis</span></code>,
+the page itself. <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/pull-data</span></code> and <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/update-analysis</span></code> return JSON,
+so a <em>busy</em> answer (HTTP 409) can be shown without reloading the page.
+<code class="docutils literal notranslate"><span class="pre">webapp.services.PullState</span></code> is the busy flag both buttons check. See
+<a class="reference internal" href="operations.html"><span class="doc">Operational notes</span></a>.</p>
+</section>
+<section id="etl-layer">
+<h2>ETL layer<a class="headerlink" href="#etl-layer" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">scrape.py</span></code></dt><dd><p><code class="docutils literal notranslate"><span class="pre">GradCafeScraper</span></code> fetches listing pages with <code class="docutils literal notranslate"><span class="pre">urllib</span></code> (honest user agent,
+<code class="docutils literal notranslate"><span class="pre">robots.txt</span></code> checked, a pause between pages) and parses them with
+BeautifulSoup into <em>raw entries</em>: the visible text of each row, plus the
+page’s own JSON copy of the entry. <code class="docutils literal notranslate"><span class="pre">scrape_new_entries</span></code> is the Pull Data
+path. It walks newest-first and stops at the first page that contains an
+entry already stored. <code class="docutils literal notranslate"><span class="pre">scrape_data</span></code> is the resumable 30,000-entry Module 2
+run.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">clean.py</span></code></dt><dd><p><code class="docutils literal notranslate"><span class="pre">clean_data</span></code> turns raw entries into records with typed fields (ISO dates,
+numbers, canonical statuses such as <code class="docutils literal notranslate"><span class="pre">Waitlisted</span></code>) and keeps every raw
+string under <code class="docutils literal notranslate"><span class="pre">raw</span></code> so each value can be traced back.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">load_data.py</span></code></dt><dd><p><code class="docutils literal notranslate"><span class="pre">load_records</span></code> maps records onto the table’s columns and inserts them:
+<code class="docutils literal notranslate"><span class="pre">COPY</span></code> into a temporary staging table, then
+<code class="docutils literal notranslate"><span class="pre">INSERT</span> <span class="pre">…</span> <span class="pre">ON</span> <span class="pre">CONFLICT</span> <span class="pre">(p_id)</span> <span class="pre">DO</span> <span class="pre">NOTHING</span></code>. Its callers run it inside one
+transaction, so a load either completes or changes nothing.
+<code class="docutils literal notranslate"><span class="pre">fetch_applicants</span></code> reads rows back as dictionaries keyed by the column
+names.</p>
+</dd>
+</dl>
+</section>
+<section id="database-layer">
+<h2>Database layer<a class="headerlink" href="#database-layer" title="Link to this heading"></a></h2>
+<p>The single table keeps the Module 3 schema unchanged:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 20.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Column</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Content</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">p_id</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">INTEGER</span> <span class="pre">PRIMARY</span> <span class="pre">KEY</span></code></p></td>
+<td><p>Grad Café’s result id (the number at the end of the entry’s URL)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">program</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;Program,</span> <span class="pre">University&quot;</span></code> as listed on Grad Café</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">comments</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p>the applicant’s comment</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">date_added</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DATE</span></code></p></td>
+<td><p>when the entry was posted</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">url</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p>link to the entry</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">Accepted</span></code>, <code class="docutils literal notranslate"><span class="pre">Rejected</span></code>, <code class="docutils literal notranslate"><span class="pre">Waitlisted</span></code>, <code class="docutils literal notranslate"><span class="pre">Interview</span></code>, <code class="docutils literal notranslate"><span class="pre">Other</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">term</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">Fall</span> <span class="pre">2026</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">us_or_international</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">American</span></code>, <code class="docutils literal notranslate"><span class="pre">International</span></code> or <code class="docutils literal notranslate"><span class="pre">Other</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gpa</span></code>, <code class="docutils literal notranslate"><span class="pre">gre</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_v</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_aw</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FLOAT</span></code></p></td>
+<td><p>self-reported scores (averages use only values on the official scale)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">degree</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">Masters</span></code>, <code class="docutils literal notranslate"><span class="pre">PhD</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">llm_generated_program</span></code>, <code class="docutils literal notranslate"><span class="pre">llm_generated_university</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TEXT</span></code></p></td>
+<td><p>names standardized by the Module 2 local LLM (<code class="docutils literal notranslate"><span class="pre">NULL</span></code> for rows added
+by Pull Data until that step is run)</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">db_config.py</span></code> is the only place that knows how to reach the server.
+<code class="docutils literal notranslate"><span class="pre">load_data.py</span></code> and <code class="docutils literal notranslate"><span class="pre">query_data.py</span></code> connect with psycopg, and <code class="docutils literal notranslate"><span class="pre">models.py</span></code>
+builds a SQLAlchemy engine from the same settings. Both go through libpq, so
+one <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> (or <code class="docutils literal notranslate"><span class="pre">~/.pgpass</span></code>) serves everything.</p>
+</section>
+<section id="how-a-request-flows">
+<h2>How a request flows<a class="headerlink" href="#how-a-request-flows" title="Link to this heading"></a></h2>
+<p><strong>Opening the page.</strong> <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/analysis</span></code> calls <code class="docutils literal notranslate"><span class="pre">QUERY_FN</span></code>, which opens one ORM
+session, runs the eleven questions and formats every number with
+<code class="docutils literal notranslate"><span class="pre">analysis_common</span></code>. Counts get thousands separators, and percentages and
+averages get exactly two decimals. The template renders each result after an
+<code class="docutils literal notranslate"><span class="pre">Answer:</span></code> label. If the query raises, the page renders a banner instead of
+a 500.</p>
+<p><strong>Pull Data.</strong> <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/pull-data</span></code> first claims the busy flag
+(<code class="docutils literal notranslate"><span class="pre">PullState.try_start</span></code>) and answers 409 if it is already taken. It then calls
+<code class="docutils literal notranslate"><span class="pre">SCRAPE_FN</span></code> and passes the result to <code class="docutils literal notranslate"><span class="pre">LOAD_FN</span></code>. It always releases the flag
+in a <code class="docutils literal notranslate"><span class="pre">finally</span></code> block and returns <code class="docutils literal notranslate"><span class="pre">{&quot;ok&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;inserted&quot;:</span> <span class="pre">N}</span></code>, or a 500
+with the error message. On success the browser shows how many rows were added
+and then reloads the page. On a 409 or 500 it shows the message and leaves the
+page as it is.</p>
+<p><strong>Update Analysis.</strong> <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/update-analysis</span></code> does no database work. It answers
+409 while a pull runs and 200 otherwise, and the browser then reloads the page.
+Because the page recomputes on every request, that reload <em>is</em> the update.</p>
+</section>
+<section id="design-decisions">
+<h2>Design decisions<a class="headerlink" href="#design-decisions" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Pull Data runs inside the request.</strong> In Module 3 it was a separate
+background process, coordinated through a lock file. Module 4 fetches only
+entries newer than the newest stored one, which takes seconds to a few
+minutes, so the whole pipeline can run in-process. That makes it testable
+with plain fakes: no subprocess, no polling, no <code class="docutils literal notranslate"><span class="pre">sleep()</span></code>.</p></li>
+<li><p><strong>Two query implementations, one set of rules.</strong> <code class="docutils literal notranslate"><span class="pre">query_data.py</span></code> (SQL) and
+<code class="docutils literal notranslate"><span class="pre">orm_queries.py</span></code> (ORM) share the matching rules, valid score ranges,
+question wording and formatting in <code class="docutils literal notranslate"><span class="pre">analysis_common.py</span></code>. A test runs both
+on the same data and requires identical output.</p></li>
+<li><p><strong>The data folder is the module folder.</strong> The command-line tools read and
+write <code class="docutils literal notranslate"><span class="pre">module_4/</span></code> (<code class="docutils literal notranslate"><span class="pre">HERE</span></code> in each module), and tests point <code class="docutils literal notranslate"><span class="pre">HERE</span></code> at a
+temporary folder, so running the tests never touches the committed data files.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="overview.html" class="btn btn-neutral float-left" title="Overview and setup" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="operations.html" class="btn btn-neutral float-right" title="Operational notes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

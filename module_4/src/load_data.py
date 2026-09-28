@@ -20,7 +20,7 @@ Design:
     store) are removed from strings.
   * The whole load is one transaction: it either completes or changes nothing.
 
-Usage:
+Usage::
     python load_data.py                                   # llm_extend_applicant_data.json
     python load_data.py --file applicant_data.json        # works without LLM columns too
     python load_data.py --reset                           # drop and recreate the table first
@@ -46,7 +46,9 @@ from psycopg.rows import dict_row
 from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, describe_target, get_database_url
 from scrape import load_data as load_json  # Module 2 JSON reader (plain or .gz)
 
-HERE = Path(__file__).resolve().parent
+# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# data files there, next to src/ rather than inside it, as in Modules 2 and 3.
+HERE = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT = "llm_extend_applicant_data.json"
 
 # Column order used everywhere in this file.
@@ -242,7 +244,7 @@ def fetch_applicants(conn: psycopg.Connection) -> list[dict]:
 
 
 def _local_file(name: str) -> Path:
-    """Input files are looked up inside module_3 by bare name (no path traversal)."""
+    """Input files are looked up in the module folder (HERE) by bare name (no path traversal)."""
     base = os.path.basename(os.path.normpath(name))
     if not base or base in (".", ".."):
         raise ValueError(f"not a usable file name: {name!r}")
@@ -252,7 +254,7 @@ def _local_file(name: str) -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Load cleaned Grad Cafe data into PostgreSQL")
     parser.add_argument("--file", default=DEFAULT_INPUT,
-                        help=f"JSON (or .json.gz) file name inside module_3 (default {DEFAULT_INPUT})")
+                        help=f"JSON (or .json.gz) file name in the module folder (default {DEFAULT_INPUT})")
     parser.add_argument("--reset", action="store_true",
                         help="drop and recreate the applicants table before loading")
     args = parser.parse_args(argv)

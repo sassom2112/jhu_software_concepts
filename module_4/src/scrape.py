@@ -25,7 +25,7 @@ Cloudflare challenge page stops the run immediately; a 5xx or a network error
 is retried only a couple of times, slowly.  Re-running the script later
 resumes from the saved checkpoint.
 
-Public API used by clean.py and the instructor's tooling:
+Public API used by clean.py and the instructor's tooling::
     GradCafeScraper.scrape_data()  -> list[dict]
     save_data(entries, path)       -> None
     load_data(path)                -> list[dict]
@@ -92,7 +92,9 @@ LISTING_JSON_ATTRIBUTE = "data-page"
 
 logger = logging.getLogger("gradcafe.scrape")
 
-HERE = Path(__file__).resolve().parent
+# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# data files there, next to src/ rather than inside it, as in Modules 2 and 3.
+HERE = Path(__file__).resolve().parent.parent
 
 
 class ScrapeBlockedError(RuntimeError):
@@ -855,7 +857,7 @@ def _safe_site_url(url: str) -> str:
 def _local_name(value: str | Path) -> str:
     """Reduce a command-line path to a bare file or folder name.
 
-    Everything this tool reads or writes lives inside the module_2 folder, so
+    Everything this tool reads or writes lives inside the module folder, so
     only the last path component of an option is used: "../../etc" collapses
     to "etc" and still lands inside the module.  Empty names are refused.
     """
@@ -979,11 +981,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-pages", type=int, default=None,
                         help="fetch at most this many pages in this run (useful for testing)")
     parser.add_argument("--data-dir", default="data",
-                        help="folder name inside module_2 for raw JSONL, checkpoint, HTML cache and log (default data)")
+                        help="folder name in the module folder for raw JSONL, checkpoint, HTML cache and log (default data)")
     parser.add_argument("--raw-output", default=None,
                         help="raw entries JSON file name inside the data folder (default raw_entries.json)")
     parser.add_argument("--output", default="applicant_data.json",
-                        help="cleaned JSON file name inside module_2 (default applicant_data.json)")
+                        help="cleaned JSON file name in the module folder (default applicant_data.json)")
     parser.add_argument("--fresh", action="store_true",
                         help="discard checkpoint, progress log and cached pages, and start from the first page")
     parser.add_argument("--no-clean", action="store_true",
@@ -1004,7 +1006,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = _parse_args(argv)
     script_dir = HERE
-    # Command-line options name files and folders inside module_2 (see _local_name).
+    # Command-line options name files and folders in the module folder (see _local_name).
     try:
         data_dir = script_dir / _local_name(args.data_dir)
         raw_output = data_dir / _local_name(args.raw_output or "raw_entries.json")

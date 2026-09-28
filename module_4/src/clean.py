@@ -11,7 +11,7 @@ Output: one dict per applicant with typed, consistently named fields.  Every
 
 Missing or unavailable values are always represented as None (JSON null).
 
-Usage:
+Usage::
     python clean.py                      # data/raw_entries.json[.gz] -> applicant_data.json
     python clean.py --input X --output Y
 """
@@ -26,7 +26,9 @@ from pathlib import Path
 
 from scrape import _local_name, load_data, save_data
 
-HERE = Path(__file__).resolve().parent
+# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# data files there, next to src/ rather than inside it, as in Modules 2 and 3.
+HERE = Path(__file__).resolve().parent.parent
 
 # --------------------------------------------------------------------------- #
 #        Patterns for the badge ("tag") texts shown under each listing row    #
@@ -366,9 +368,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", default=None,
                         help="raw entries file name inside data/ (default raw_entries.json, or its .gz copy)")
     parser.add_argument("--output", default="applicant_data.json",
-                        help="cleaned JSON file name inside module_2 (default applicant_data.json)")
+                        help="cleaned JSON file name in the module folder (default applicant_data.json)")
     args = parser.parse_args(argv)
-    # Options name files inside module_2 (bare names; see scrape._local_name).
+    # Options name files in the module folder (bare names; see scrape._local_name).
     try:
         input_path = script_dir / "data" / _local_name(args.input) if args.input else _default_raw_input(script_dir)
         output_path = script_dir / _local_name(args.output)

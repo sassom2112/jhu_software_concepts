@@ -1,0 +1,400 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Testing guide &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f46eefca"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API reference" href="api/index.html" />
+    <link rel="prev" title="Troubleshooting" href="troubleshooting.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Testing guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-suite">Running the suite</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#markers">Markers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#which-tests-need-postgresql">Which tests need PostgreSQL</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stable-selectors">Stable selectors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixtures-and-test-doubles">Fixtures and test doubles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#techniques-used">Techniques used</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#continuous-integration">Continuous integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-test">Adding a test</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Testing guide</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="testing-guide">
+<h1>Testing guide<a class="headerlink" href="#testing-guide" title="Link to this heading"></a></h1>
+<p>The suite lives in <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code>. It covers every line of
+<code class="docutils literal notranslate"><span class="pre">module_4/src</span></code>, runs in a few seconds, never touches the internet, and never
+sleeps. Everything it needs from outside the process is replaced with a fake,
+except PostgreSQL. For the database tests it uses a real, throwaway
+<code class="docutils literal notranslate"><span class="pre">*_test</span></code> database.</p>
+<section id="running-the-suite">
+<h2>Running the suite<a class="headerlink" href="#running-the-suite" title="Link to this heading"></a></h2>
+<p>Once, create the test database (see <a class="reference internal" href="overview.html"><span class="doc">Overview and setup</span></a> for the server itself):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>gradcafe-postgres<span class="w"> </span>createdb<span class="w"> </span>-U<span class="w"> </span>gradcafe<span class="w"> </span>gradcafe_test
+</pre></div>
+</div>
+<p>Then, from the <strong>repository root</strong> (<code class="docutils literal notranslate"><span class="pre">jhu_software_concepts/</span></code>):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql://gradcafe@localhost:5432/gradcafe_test<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>module_4/.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>module_4<span class="w"> </span>-m<span class="w"> </span><span class="s2">"web or buttons or analysis or db or integration"</span>
+</pre></div>
+</div>
+<p>The run must start at the root because <code class="docutils literal notranslate"><span class="pre">module_4/pytest.ini</span></code> adds
+<code class="docutils literal notranslate"><span class="pre">--cov=module_4/src</span> <span class="pre">--cov-report=term-missing</span> <span class="pre">--cov-fail-under=100</span></code>. Coverage
+paths are relative to the directory pytest starts in, and the run fails if any
+line of <code class="docutils literal notranslate"><span class="pre">src</span></code> is not executed. The output ends with the coverage table and
+<code class="docutils literal notranslate"><span class="pre">Required</span> <span class="pre">test</span> <span class="pre">coverage</span> <span class="pre">of</span> <span class="pre">100%</span> <span class="pre">reached</span></code>. That output is committed as
+<code class="docutils literal notranslate"><span class="pre">module_4/coverage_summary.txt</span></code>. To refresh it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql://gradcafe@localhost:5432/gradcafe_test<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>module_4/.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>module_4<span class="w"> </span>-m<span class="w"> </span><span class="s2">"web or buttons or analysis or db or integration"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span>module_4/coverage_summary.txt
+</pre></div>
+</div>
+<p>The password comes from <code class="docutils literal notranslate"><span class="pre">~/.pgpass</span></code>, so it never appears in the command.</p>
+</section>
+<section id="markers">
+<h2>Markers<a class="headerlink" href="#markers" title="Link to this heading"></a></h2>
+<p>Every test carries at least one of the five markers registered in
+<code class="docutils literal notranslate"><span class="pre">pytest.ini</span></code>. The marker expression above therefore selects the entire
+suite, and <code class="docutils literal notranslate"><span class="pre">-m</span> <span class="pre">web</span></code> (for example) selects one slice of it.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 14.0%" />
+<col style="width: 46.0%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Marker</p></th>
+<th class="head"><p>What it covers</p></th>
+<th class="head"><p>Files</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">web</span></code></p></td>
+<td><p>Routes are registered, the page loads and shows both buttons,
+<code class="docutils literal notranslate"><span class="pre">/</span></code> redirects, the database-down banner appears, and <code class="docutils literal notranslate"><span class="pre">run.py</span></code>
+starts the server.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_flask_page.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_app_wiring.py</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">buttons</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/pull-data</span></code> and <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/update-analysis</span></code>: 200 responses, the
+loader receives the scraper’s rows, 409 while busy, 500 on a failed load.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_buttons.py</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">analysis</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Answer:</span></code> labels on every result, percentages with exactly two
+decimals, the number formatters, SQL and ORM giving identical
+answers, and the analysis command-line tools.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_analysis_format.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_query_tools.py</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">db</span></code></p></td>
+<td><p>The data layer: schema, inserts, duplicates and rollback in
+PostgreSQL, plus the code that feeds it (<code class="docutils literal notranslate"><span class="pre">db_config</span></code>,
+<code class="docutils literal notranslate"><span class="pre">load_data</span></code>, <code class="docutils literal notranslate"><span class="pre">clean</span></code>, <code class="docutils literal notranslate"><span class="pre">scrape</span></code>).</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_db_insert.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_load_data.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_db_config.py</span></code>,
+<code class="docutils literal notranslate"><span class="pre">test_clean.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_scrape_parsing.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_scrape_http.py</span></code>,
+<code class="docutils literal notranslate"><span class="pre">test_scrape_full.py</span></code>, and part of <code class="docutils literal notranslate"><span class="pre">test_app_wiring.py</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">integration</span></code></p></td>
+<td><p>End to end: pull, then update, then render, with overlapping pulls
+and a pull that is still running.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_integration_end_to_end.py</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>The assignment fixes these five names, so the scraper and cleaner tests use
+<code class="docutils literal notranslate"><span class="pre">db</span></code>, the marker for the data layer, even though most of them need no
+database. <code class="docutils literal notranslate"><span class="pre">test_query_tools.py</span></code> carries both <code class="docutils literal notranslate"><span class="pre">analysis</span></code> and <code class="docutils literal notranslate"><span class="pre">db</span></code>.</p>
+<section id="which-tests-need-postgresql">
+<h3>Which tests need PostgreSQL<a class="headerlink" href="#which-tests-need-postgresql" title="Link to this heading"></a></h3>
+<p>A test needs the database only if it asks for <code class="docutils literal notranslate"><span class="pre">db_conn</span></code>, directly or through
+<code class="docutils literal notranslate"><span class="pre">db_client</span></code>, <code class="docutils literal notranslate"><span class="pre">db_app</span></code> or <code class="docutils literal notranslate"><span class="pre">sample_data</span></code>. Without a <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> that
+names a <code class="docutils literal notranslate"><span class="pre">*_test</span></code> database, those tests <strong>error</strong> at the guard, and every other
+test still passes. For a quick run with no database at all:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>module_4/.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>module_4<span class="w"> </span>-m<span class="w"> </span><span class="s2">"web or buttons"</span><span class="w"> </span>--no-cov
+</pre></div>
+</div>
+</section>
+</section>
+<section id="stable-selectors">
+<h2>Stable selectors<a class="headerlink" href="#stable-selectors" title="Link to this heading"></a></h2>
+<p>The tests read the page with BeautifulSoup, through selectors that exist for
+that purpose and do not depend on styling:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 60.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Selector</p></th>
+<th class="head"><p>Element</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">[data-testid=&quot;pull-data-btn&quot;]</span></code></p></td>
+<td><p>The Pull Data button. It has the <code class="docutils literal notranslate"><span class="pre">disabled</span></code> attribute while a pull is
+running.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">[data-testid=&quot;update-analysis-btn&quot;]</span></code></p></td>
+<td><p>The Update Analysis button.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">.answer-label</span></code></p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">Answer:</span></code> label before every result line, and above every result
+table.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">article.card</span></code>, <code class="docutils literal notranslate"><span class="pre">.card-number</span></code>, <code class="docutils literal notranslate"><span class="pre">div.result</span></code> (<code class="docutils literal notranslate"><span class="pre">dt</span></code> / <code class="docutils literal notranslate"><span class="pre">dd</span></code>)</p></td>
+<td><p>One question card, its number, and each labelled result inside it.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">.stat-value</span></code></p></td>
+<td><p>The summary numbers at the top (the first one is the entry count).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">[role=&quot;alert&quot;]</span></code></p></td>
+<td><p>The banner shown when the database cannot be read.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Percentages are checked with two regular expressions, after <code class="docutils literal notranslate"><span class="pre">&lt;script&gt;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&lt;style&gt;</span></code> are removed from the page. <code class="docutils literal notranslate"><span class="pre">(\d[\d,]*(?:\.\d+)?)\s*%</span></code> finds every
+percentage, and <code class="docutils literal notranslate"><span class="pre">^\d[\d,]*\.\d{2}$</span></code> requires exactly two decimals.</p>
+</section>
+<section id="fixtures-and-test-doubles">
+<h2>Fixtures and test doubles<a class="headerlink" href="#fixtures-and-test-doubles" title="Link to this heading"></a></h2>
+<p>Shared fixtures live in <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code>. pytest finds that file on its
+own, so no test imports it.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 75.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Fixture</p></th>
+<th class="head"><p>What it provides</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fake_scraper</span></code></p></td>
+<td><p>A <code class="docutils literal notranslate"><span class="pre">FakeScraper</span></code>: returns <code class="docutils literal notranslate"><span class="pre">.rows</span></code> (empty until a test sets it) and
+counts <code class="docutils literal notranslate"><span class="pre">.calls</span></code>. It replaces <code class="docutils literal notranslate"><span class="pre">SCRAPE_FN</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fake_loader</span></code></p></td>
+<td><p>A <code class="docutils literal notranslate"><span class="pre">FakeLoader</span></code>: records every batch in <code class="docutils literal notranslate"><span class="pre">.calls</span></code> and “inserts”
+<code class="docutils literal notranslate"><span class="pre">len(rows)</span></code>. It replaces <code class="docutils literal notranslate"><span class="pre">LOAD_FN</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">app</span></code> / <code class="docutils literal notranslate"><span class="pre">client</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_app(scrape_fn=fake_scraper,</span> <span class="pre">load_fn=fake_loader,</span> <span class="pre">query_fn=…)</span></code>
+returning <code class="docutils literal notranslate"><span class="pre">FAKE_ANALYSIS</span></code>, and Flask’s in-process test client for it.
+No network and no database.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">raw_entries</span></code> / <code class="docutils literal notranslate"><span class="pre">entry_factory</span></code></p></td>
+<td><p>Three raw entries shaped exactly like the scraper’s output, and
+<code class="docutils literal notranslate"><span class="pre">make_raw_entry(result_id,</span> <span class="pre">**overrides)</span></code> for tests that need specific
+values.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">database_url</span></code></p></td>
+<td><p>Session-scoped guard. It fails the test unless the database name ends
+in <code class="docutils literal notranslate"><span class="pre">_test</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">db_conn</span></code></p></td>
+<td><p>An autocommit psycopg connection to the test database, with the
+<code class="docutils literal notranslate"><span class="pre">applicants</span></code> table created and <strong>emptied</strong> before each test.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">db_app</span></code> / <code class="docutils literal notranslate"><span class="pre">db_client</span></code></p></td>
+<td><p>The real loader and real ORM queries against the test database. Only
+the scraper is fake.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fake_site</span></code></p></td>
+<td><p>Replaces the internet for one test. <code class="docutils literal notranslate"><span class="pre">urllib.request.urlopen</span></code> is
+answered by <code class="docutils literal notranslate"><span class="pre">fake_gradcafe.FakeSite</span></code>, and <code class="docutils literal notranslate"><span class="pre">time.sleep</span></code> is recorded
+in <code class="docutils literal notranslate"><span class="pre">fake_site.sleeps</span></code> instead of waiting.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scraper</span></code></p></td>
+<td><p>A <code class="docutils literal notranslate"><span class="pre">GradCafeScraper</span></code> whose data folder is the test’s <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">tests/fake_gradcafe.py</span></code> is not a test file; it is the toolkit the scraper
+tests import:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">listing_page(applicants,</span> <span class="pre">next_url=…,</span> <span class="pre">payload=…)</span></code> builds a survey page
+with the same structure as the real one: the results table, badge and
+comment rows, the mobile-only duplicate badge, ad rows, the “Next” link,
+and the JSON copy of the rows. <code class="docutils literal notranslate"><span class="pre">applicant(result_id,</span> <span class="pre">**fields)</span></code> describes
+one row.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">make_cursor(...)</span></code> and <code class="docutils literal notranslate"><span class="pre">survey_url(cursor)</span></code> build the cursor-paginated
+URLs exactly as the scraper requests them.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FakeSite.serve(url,</span> <span class="pre">*responses)</span></code> queues responses for one URL:
+<code class="docutils literal notranslate"><span class="pre">page(html,</span> <span class="pre">headers)</span></code>, <code class="docutils literal notranslate"><span class="pre">http_error(code,</span> <span class="pre">body,</span> <span class="pre">headers)</span></code> (a fresh
+<code class="docutils literal notranslate"><span class="pre">HTTPError</span></code> every time), or any exception instance such as
+<code class="docutils literal notranslate"><span class="pre">URLError(...)</span></code>. <code class="docutils literal notranslate"><span class="pre">serve_listing([[ids],</span> <span class="pre">[ids],</span> <span class="pre">...])</span></code> serves
+<code class="docutils literal notranslate"><span class="pre">robots.txt</span></code> and a chain of pages joined by “Next” links. The site
+records <code class="docutils literal notranslate"><span class="pre">requested</span></code>, <code class="docutils literal notranslate"><span class="pre">user_agents</span></code>, <code class="docutils literal notranslate"><span class="pre">timeouts</span></code> and <code class="docutils literal notranslate"><span class="pre">sleeps</span></code>.</p></li>
+</ul>
+<p>Some files add their own fixtures on top: <code class="docutils literal notranslate"><span class="pre">mixed_client</span></code>
+(<code class="docutils literal notranslate"><span class="pre">test_analysis_format.py</span></code>), <code class="docutils literal notranslate"><span class="pre">first_batch</span></code>
+(<code class="docutils literal notranslate"><span class="pre">test_integration_end_to_end.py</span></code>), <code class="docutils literal notranslate"><span class="pre">sample_data</span></code> and <code class="docutils literal notranslate"><span class="pre">report_path</span></code>
+(<code class="docutils literal notranslate"><span class="pre">test_query_tools.py</span></code>), and <code class="docutils literal notranslate"><span class="pre">input_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">work_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">module_dir</span></code>.
+Those last three point <code class="docutils literal notranslate"><span class="pre">load_data</span></code>, <code class="docutils literal notranslate"><span class="pre">clean</span></code> and <code class="docutils literal notranslate"><span class="pre">scrape</span></code> at <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code>
+through <code class="docutils literal notranslate"><span class="pre">monkeypatch.setattr(module,</span> <span class="pre">&quot;HERE&quot;,</span> <span class="pre">tmp_path)</span></code>, so command-line tests
+never write into the real module folder.</p>
+</section>
+<section id="techniques-used">
+<h2>Techniques used<a class="headerlink" href="#techniques-used" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Dependency injection.</strong> <code class="docutils literal notranslate"><span class="pre">create_app(scrape_fn=,</span> <span class="pre">load_fn=,</span> <span class="pre">query_fn=)</span></code>
+lets every button test run the real routes against fakes.</p></li>
+<li><p><strong>Busy state without waiting.</strong> <code class="docutils literal notranslate"><span class="pre">app.pull_state.try_start()</span></code> puts the app
+in the <em>pull running</em> state directly. The test then checks the 409s, and
+<code class="docutils literal notranslate"><span class="pre">finish()</span></code> ends it.</p></li>
+<li><p><strong>No network.</strong> Every scraper test uses <code class="docutils literal notranslate"><span class="pre">fake_site</span></code>. The scraper tests
+also pass inside a network namespace with no network at all
+(<code class="docutils literal notranslate"><span class="pre">unshare</span> <span class="pre">-rn</span></code>).</p></li>
+<li><p><strong>monkeypatch / runpy / capsys / caplog / tmp_path.</strong>
+<code class="docutils literal notranslate"><span class="pre">monkeypatch.setattr</span></code> / <code class="docutils literal notranslate"><span class="pre">setenv</span></code> swap a class, a constant or an
+environment variable for one test. <code class="docutils literal notranslate"><span class="pre">runpy.run_module(name,</span>
+<span class="pre">run_name=&quot;__main__&quot;)</span></code> runs a module exactly as <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">name.py</span></code> would,
+which covers its <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">__name__</span> <span class="pre">==</span> <span class="pre">&quot;__main__&quot;</span></code> line. <code class="docutils literal notranslate"><span class="pre">capsys</span></code> and
+<code class="docutils literal notranslate"><span class="pre">caplog</span></code> capture printed output and log records. <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code> is a fresh
+folder per test.</p></li>
+<li><p><strong>Red, then green.</strong> Two real bugs were found by writing the test first.
+The table cards had no <code class="docutils literal notranslate"><span class="pre">Answer:</span></code> label, and <code class="docutils literal notranslate"><span class="pre">build_query_results.py</span></code>
+crashed on an empty database. Each test failed before the fix and passes
+after it.</p></li>
+<li><p><strong>Mutation testing.</strong> During development the scraper tests were checked by
+breaking <code class="docutils literal notranslate"><span class="pre">scrape.py</span></code> on purpose, one small change at a time, in throwaway
+copies. Every change had to make at least one test fail, and the tests that
+let a change through were strengthened.</p></li>
+</ul>
+</section>
+<section id="continuous-integration">
+<h2>Continuous integration<a class="headerlink" href="#continuous-integration" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">.github/workflows/tests.yml</span></code> (at the repository root, where GitHub runs it,
+with an identical copy at <code class="docutils literal notranslate"><span class="pre">module_4/.github/workflows/tests.yml</span></code>) runs on
+every push that touches <code class="docutils literal notranslate"><span class="pre">module_4</span></code>:</p>
+<ol class="arabic simple">
+<li><p>It starts a <code class="docutils literal notranslate"><span class="pre">postgres:17</span></code> service container with a <code class="docutils literal notranslate"><span class="pre">gradcafe_test</span></code>
+database and <code class="docutils literal notranslate"><span class="pre">trust</span></code> authentication, so no password is needed or stored.</p></li>
+<li><p>It installs Python 3.11 and <code class="docutils literal notranslate"><span class="pre">module_4/requirements.txt</span></code>.</p></li>
+<li><p>It checks that the two copies of the workflow are identical.</p></li>
+<li><p>It runs the same pytest command as above, from the repository root, with
+<code class="docutils literal notranslate"><span class="pre">DATABASE_URL=postgresql://gradcafe&#64;localhost:5432/gradcafe_test</span></code>, and
+fails below 100% coverage.</p></li>
+<li><p>In a second job, it builds this documentation with <code class="docutils literal notranslate"><span class="pre">sphinx-build</span> <span class="pre">-W</span></code>.</p></li>
+</ol>
+</section>
+<section id="adding-a-test">
+<h2>Adding a test<a class="headerlink" href="#adding-a-test" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Name the file <code class="docutils literal notranslate"><span class="pre">test_*.py</span></code> and put it in <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code>. Otherwise
+pytest will not collect it.</p></li>
+<li><p>Mark every test with one of the five markers, or set <code class="docutils literal notranslate"><span class="pre">pytestmark</span></code> for the
+whole file.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">client</span></code> for the page and buttons, <code class="docutils literal notranslate"><span class="pre">db_conn</span></code> / <code class="docutils literal notranslate"><span class="pre">db_client</span></code> for
+anything that must reach PostgreSQL, and <code class="docutils literal notranslate"><span class="pre">fake_site</span></code> for anything that
+would reach Grad Café.</p></li>
+<li><p>Never call <code class="docutils literal notranslate"><span class="pre">time.sleep</span></code>, never depend on the clock or on test order, and
+write files only under <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="troubleshooting.html" class="btn btn-neutral float-left" title="Troubleshooting" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api/index.html" class="btn btn-neutral float-right" title="API reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

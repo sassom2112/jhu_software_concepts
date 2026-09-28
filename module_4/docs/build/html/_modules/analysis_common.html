@@ -1,0 +1,270 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>analysis_common &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f46eefca"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../testing.html">Testing guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">analysis_common</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for analysis_common</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""</span>
+<span class="sd">analysis_common.py - Definitions shared by the raw-SQL and SQLAlchemy analyses.</span>
+
+<span class="sd">JHU EN.605.256 Modern Software Concepts in Python - Module 3.</span>
+
+<span class="sd">query_data.py (handwritten SQL) and orm_queries.py (SQLAlchemy) must answer</span>
+<span class="sd">the same questions in the same way, and the console, the PDF and the Flask page</span>
+<span class="sd">must format results identically.  Everything they have to agree on lives here:</span>
+<span class="sd">the question wording, the matching rules, the valid score ranges and the</span>
+<span class="sd">number formatting.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span><span class="p">,</span> <span class="n">ROUND_HALF_UP</span>
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                               Matching rules                                #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1"># Text comparisons ignore case and surrounding spaces.</span>
+
+<span class="n">FALL_2026</span> <span class="o">=</span> <span class="s2">"fall 2026"</span>
+<span class="n">FALL_2025</span> <span class="o">=</span> <span class="s2">"fall 2025"</span>
+
+<span class="n">INTERNATIONAL</span> <span class="o">=</span> <span class="s2">"international"</span>
+<span class="n">AMERICAN</span> <span class="o">=</span> <span class="s2">"american"</span>
+<span class="c1"># A nationality classification is "usable" when it is one of the site's three</span>
+<span class="c1"># answers; missing or blank values are excluded from the denominator.</span>
+<span class="n">NATIONALITY_CLASSES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"international"</span><span class="p">,</span> <span class="s2">"american"</span><span class="p">,</span> <span class="s2">"other"</span><span class="p">)</span>
+
+<span class="c1"># ILIKE pattern applied to TRIM(status): "Accepted" (and e.g. "accepted", "Acceptance").</span>
+<span class="n">ACCEPTED_PATTERN</span> <span class="o">=</span> <span class="s2">"accept%"</span>
+
+<span class="c1"># PostgreSQL regular expressions (Advanced RE syntax; \m and \M are the start</span>
+<span class="c1"># and end of a word).  Used with ~* (case-insensitive) unless noted.</span>
+<span class="n">JHU_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"(johns?\s+hopkins|\mjhu\M)"</span>
+<span class="n">COMPUTER_SCIENCE_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"(computer\s+science|\meecs\M)"</span>
+<span class="n">MASTERS_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"^\s*master"</span>
+<span class="n">PHD_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"^\s*ph\.?\s*d"</span>
+
+<span class="c1"># Question 8 (original `program` text): one case-insensitive pattern per school,</span>
+<span class="c1"># plus the acronym MIT matched case-sensitively so words like "mit" do not count.</span>
+<span class="n">ORIGINAL_UNIVERSITY_REGEXES</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="sa">r</span><span class="s2">"georgetown"</span><span class="p">,</span>
+    <span class="sa">r</span><span class="s2">"massachusetts\s+institute\s+of\s+technology"</span><span class="p">,</span>
+    <span class="sa">r</span><span class="s2">"stanford"</span><span class="p">,</span>
+    <span class="sa">r</span><span class="s2">"(carnegie\s+mellon|\mcmu\M)"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">MIT_ACRONYM_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"\mMIT\M"</span>  <span class="c1"># used with ~ (case-sensitive)</span>
+
+<span class="c1"># Question 9 (LLM fields): the standardizer produces canonical names.</span>
+<span class="n">LLM_TARGET_UNIVERSITIES</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"georgetown university"</span><span class="p">,</span>
+    <span class="s2">"massachusetts institute of technology"</span><span class="p">,</span>
+    <span class="s2">"stanford university"</span><span class="p">,</span>
+    <span class="s2">"carnegie mellon university"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># A test score or GPA counts as "provided" only when it lies on the official</span>
+<span class="c1"># scale.  Applicants often type a 260-340 GRE total into the Quantitative</span>
+<span class="c1"># field, or 99.99 into Analytical Writing; averaging those with real section</span>
+<span class="c1"># scores would be meaningless.  The stored values are never modified.</span>
+<span class="n">GPA_MIN_EXCLUSIVE</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">GPA_MAX</span> <span class="o">=</span> <span class="mf">4.0</span>
+<span class="n">GRE_SECTION_MIN</span> <span class="o">=</span> <span class="mf">130.0</span>
+<span class="n">GRE_SECTION_MAX</span> <span class="o">=</span> <span class="mf">170.0</span>
+<span class="n">GRE_AW_MIN</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">GRE_AW_MAX</span> <span class="o">=</span> <span class="mf">6.0</span>
+
+<span class="c1"># Original questions</span>
+<span class="n">MIN_ENTRIES_PER_DEGREE</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">TOP_UNIVERSITY_COUNT</span> <span class="o">=</span> <span class="mi">10</span>
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                               Question wording                              #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+<span class="n">QUESTIONS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"1"</span><span class="p">:</span> <span class="s2">"How many entries in the database are from applicants who applied for Fall 2026?"</span><span class="p">,</span>
+    <span class="s2">"2"</span><span class="p">:</span> <span class="s2">"Among entries that provide a nationality classification, what percentage are international students?"</span><span class="p">,</span>
+    <span class="s2">"3"</span><span class="p">:</span> <span class="s2">"What are the average GPA, GRE Quantitative, GRE Verbal, and GRE Analytical Writing scores "</span>
+         <span class="s2">"of applicants who provide each metric?"</span><span class="p">,</span>
+    <span class="s2">"4"</span><span class="p">:</span> <span class="s2">"What is the average GPA of American applicants who applied for Fall 2026?"</span><span class="p">,</span>
+    <span class="s2">"5"</span><span class="p">:</span> <span class="s2">"What percentage of Fall 2025 entries are acceptances?"</span><span class="p">,</span>
+    <span class="s2">"6"</span><span class="p">:</span> <span class="s2">"What is the average GPA of accepted applicants who applied for Fall 2026?"</span><span class="p">,</span>
+    <span class="s2">"7"</span><span class="p">:</span> <span class="s2">"How many entries are from applicants who applied to Johns Hopkins University for a "</span>
+         <span class="s2">"master's degree in Computer Science?"</span><span class="p">,</span>
+    <span class="s2">"8"</span><span class="p">:</span> <span class="s2">"How many Fall 2026 entries are acceptances from applicants applying for a PhD in Computer "</span>
+         <span class="s2">"Science at Georgetown University, MIT, Stanford University, or Carnegie Mellon University "</span>
+         <span class="s2">"(using the original downloaded fields)?"</span><span class="p">,</span>
+    <span class="s2">"9"</span><span class="p">:</span> <span class="s2">"Repeating Question 8 with the LLM-generated program and university fields, how does the "</span>
+         <span class="s2">"count compare with the original-field count?"</span><span class="p">,</span>
+    <span class="s2">"10"</span><span class="p">:</span> <span class="s2">"Original question: For Fall 2026, how do the acceptance rate and the average GPA of accepted "</span>
+          <span class="s2">"applicants compare across degree types that have at least 100 entries?"</span><span class="p">,</span>
+    <span class="s2">"11"</span><span class="p">:</span> <span class="s2">"Original question: Which ten universities (LLM-standardized names) have the most Fall 2026 "</span>
+          <span class="s2">"entries, and what percentage of each university's entries report an acceptance?"</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+<span class="c1">#                                  Formatting                                 #</span>
+<span class="c1"># --------------------------------------------------------------------------- #</span>
+
+<span class="n">NOT_AVAILABLE</span> <span class="o">=</span> <span class="s2">"N/A"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_two_places</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Round half-up to two decimals (the same rule as PostgreSQL's ROUND on numeric)."""</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span><span class="o">.</span><span class="n">quantize</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">"0.01"</span><span class="p">),</span> <span class="n">rounding</span><span class="o">=</span><span class="n">ROUND_HALF_UP</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="format_count">
+<a class="viewcode-back" href="../api/database.html#analysis_common.format_count">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_count</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whole number with thousands separators: 30066 -&gt; '30,066'."""</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"0"</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span></div>
+
+
+
+<div class="viewcode-block" id="format_percent">
+<a class="viewcode-back" href="../api/database.html#analysis_common.format_percent">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_percent</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Two decimals and a percent sign: 46.353 -&gt; '46.35%'."""</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">NOT_AVAILABLE</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_two_places</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2">%"</span></div>
+
+
+
+<div class="viewcode-block" id="format_average">
+<a class="viewcode-back" href="../api/database.html#analysis_common.format_average">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_average</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Two decimals: 3.7712 -&gt; '3.77'."""</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">NOT_AVAILABLE</span>
+    <span class="k">return</span> <span class="n">_two_places</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="format_difference">
+<a class="viewcode-back" href="../api/database.html#analysis_common.format_difference">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_difference</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Signed whole number: 3 -&gt; '+3', -2 -&gt; '-2', 0 -&gt; '0'."""</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">number</span><span class="si">:</span><span class="s2">+d</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">number</span> <span class="k">else</span> <span class="s2">"0"</span></div>
+
+
+
+<div class="viewcode-block" id="format_table">
+<a class="viewcode-back" href="../api/database.html#analysis_common.format_table">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_table</span><span class="p">(</span><span class="n">columns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Plain-text table lines: first column left-aligned, the others right-aligned."""</span>
+    <span class="n">widths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">column</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">)]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">line</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">cells</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="n">widths</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">rjust</span><span class="p">(</span><span class="n">widths</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="s2">"  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cells</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">[</span><span class="n">line</span><span class="p">(</span><span class="n">columns</span><span class="p">),</span> <span class="s2">"  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"-"</span> <span class="o">*</span> <span class="n">width</span> <span class="k">for</span> <span class="n">width</span> <span class="ow">in</span> <span class="n">widths</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">line</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -6,7 +6,7 @@ JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 Runs every question in query_data.py against the live database and writes an
 HTML report with, for each question: the question in words, the result, the
 exact SQL that query_data.py executes, and an explanation.  Print the HTML to
-PDF with any browser (File > Print > Save as PDF), or headless Chrome:
+PDF with any browser (File > Print > Save as PDF), or headless Chrome::
 
     python build_query_results.py
     google-chrome --headless --no-pdf-header-footer --print-to-pdf=query_results.pdf query_results.html
@@ -25,7 +25,9 @@ import analysis_common as rules
 import query_data
 from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, describe_target, get_database_url
 
-HERE = Path(__file__).resolve().parent
+# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# data files there, next to src/ rather than inside it, as in Modules 2 and 3.
+HERE = Path(__file__).resolve().parent.parent
 OUTPUT = HERE / "query_results.html"
 
 CSS = """
