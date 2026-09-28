@@ -10,6 +10,8 @@ from __future__ import annotations
 
 
 import sys 
+import time
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,7 @@ from webapp import create_app       # noqa: E402 (must come after the sys.path f
 from db_config import get_database_url   # noqa: E402
 from load_data import connect, create_table   # noqa: E402
 from scrape import GradCafeScraper   # noqa: E402
+from fake_gradcafe import FakeSite   # noqa: E402  (tests/fake_gradcafe.py)
 
 # A realistic-shaped fake for QUERY_FN: same structure orm_queries.get_analysis()
 # returns in the real app, so templates render exactly the way they would with
@@ -112,7 +115,7 @@ def make_raw_entry(result_id: int, **overrides) -> dict:
         "tags_text": ["Fall 2027", "International", "GPA 3.90"],
         "comment_text": "Test entry - not real data.",
         "listing_json": None,
-        "source_page_url": "https://www.thegradcafe.com/survey/?page=1",
+        "source_page_url": "https://www.thegradcafe.com/survey?page=1",
         "scraped_at": "2026-09-20T12:00:00+00:00",
     }
     entry.update(overrides)
@@ -175,3 +178,16 @@ def db_client(db_app):
 def scraper(tmp_path):
     """A scraper whose data folder (robots copy, progress log, cached pages) is a temporary folder."""
     return GradCafeScraper(data_dir=tmp_path)
+
+@pytest.fixture
+def fake_site(monkeypatch):
+    """Replace the internet for one test.
+
+    urllib.request.urlopen is answered by a FakeSite, and time.sleep() is
+    recorded in fake_site.sleeps instead of actually waiting.
+    """
+    site = FakeSite()
+    monkeypatch.setattr(urllib.request, "urlopen", site.urlopen)
+    monkeypatch.setattr(time, "sleep", site.sleeps.append)
+    return site
+

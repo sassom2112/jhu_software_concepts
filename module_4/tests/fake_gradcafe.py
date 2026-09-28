@@ -11,7 +11,8 @@ tests import from it.  It provides:
   applicant, a "Next" link, and the JSON copy of the rows in <div id="app">.
 * page() / http_error() / FakeSite: canned responses.  FakeSite.urlopen
   replaces urllib.request.urlopen (see the fake_site fixture in conftest.py)
-  and records every URL requested and every sleep the scraper asked for.
+  and records every URL requested, every timeout passed, and every sleep the
+  scraper asked for.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ import html
 import io
 import json
 import urllib.error
+from dataclasses import dataclass, field
+from http import HTTPStatus
 from urllib.parse import urlencode
 
 SITE = "https://www.thegradcafe.com"
@@ -110,9 +113,19 @@ def page(body: str, headers: dict | None = None) -> tuple[str, dict]:
     return body, headers or {}
 
 
-def http_error(code: int, body: str = "", headers: dict | None = None) -> urllib.error.HTTPError:
-    """An HTTP error response; urlopen raises these, just like the real one."""
-    return urllib.error.HTTPError(SITE, code, f"HTTP {code}", headers or {}, io.BytesIO(body.encode("utf-8")))
+@dataclass
+class ErrorResponse:
+    """An HTTP error status the fake site answers with (see http_error)."""
+
+    code: int
+    body: str = ""
+    headers: dict = field(default_factory=dict)
+
+
+def http_error(code: int, body: str = "", headers: dict | None = None) -> ErrorResponse:
+    """An HTTP error response.  FakeSite raises a brand-new HTTPError for it on every
+    request, exactly like a real server, so its body can be read on every request."""
+    return ErrorResponse(code, body, headers or {})
 
 
 class FakeResponse:
@@ -136,14 +149,15 @@ class FakeSite:
     """Answers urlopen() from canned responses; any URL not served is a 404.
 
     serve(url, *responses) queues responses for one URL; they are used in
-    order and the last one repeats.  A response is page(...) or an exception
-    instance to raise (http_error(503), URLError(...), KeyboardInterrupt()...).
+    order and the last one repeats.  A response is page(...), http_error(...),
+    or an exception instance to raise (URLError(...), KeyboardInterrupt()...).
     """
 
     def __init__(self) -> None:
         self.responses: dict[str, list] = {}
         self.requested: list[str] = []
         self.user_agents: list[str] = []
+        self.timeouts: list[float | None] = []
         self.sleeps: list[float] = []
 
     def serve(self, url: str, *responses) -> None:
@@ -166,8 +180,12 @@ class FakeSite:
         url = request.full_url
         self.requested.append(url)
         self.user_agents.append(request.get_header("User-agent"))
+        self.timeouts.append(timeout)
         queue = self.responses.get(url) or [http_error(404)]
         response = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(response, ErrorResponse):
+            raise urllib.error.HTTPError(url, response.code, HTTPStatus(response.code).phrase, response.headers,
+                                         io.BytesIO(response.body.encode("utf-8")))
         if isinstance(response, BaseException):
             raise response
         body, headers = response

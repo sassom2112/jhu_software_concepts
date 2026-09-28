@@ -102,7 +102,13 @@ def test_robots_rules(robots_text, agent, path, allowed):
 
 @pytest.mark.parametrize(
     ("text", "expected"),
-    [(ROBOTS_TXT, True), ("", True), ("<!DOCTYPE html><html><body>Sign in</body></html>", False), ("hello", False)],
+    [
+        (ROBOTS_TXT, True),
+        ("", True),                                                            # an empty file allows everything
+        ("<!DOCTYPE html><html><body>Sign in</body></html>", False),
+        ("<html><body>Blocked: unrecognised User-Agent</body></html>", False),  # HTML, even if it says User-Agent
+        ("hello", False),
+    ],
 )
 def test_looks_like_robots_file(text, expected):
     assert _looks_like_robots_file(text) is expected

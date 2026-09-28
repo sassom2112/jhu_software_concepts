@@ -950,12 +950,17 @@ def _lxml_available() -> bool:
 
 
 def _configure_logging(log_path: Path) -> None:
-    """Log to stdout and to <data-dir>/scrape.log."""
+    """Log to stdout and to <data-dir>/scrape.log.
+
+    delay=True opens the log file only when the first record is written, so no
+    file is left open when basicConfig does nothing (the root logger already
+    has handlers, as it does under pytest).
+    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(log_path, encoding="utf-8")],
+        handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(log_path, encoding="utf-8", delay=True)],
     )
 
 
