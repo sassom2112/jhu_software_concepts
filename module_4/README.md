@@ -6,7 +6,7 @@
 
 | | |
 | --- | --- |
-| Documentation (Read the Docs) | https://sassom2112-jhu-software-concepts.readthedocs.io/en/latest/ |
+| Documentation (Read the Docs) | https://sassom2112-jhu-software-concept.readthedocs.io/en/latest/ |
 | Continuous integration | [`.github/workflows/tests.yml`](../.github/workflows/tests.yml) · proof: [`actions_success.png`](actions_success.png) |
 | Coverage proof | [`coverage_summary.txt`](coverage_summary.txt): 100% of `module_4/src` |
 | Repository (SSH) | `git@github.com:sassom2112/jhu_software_concepts.git` (also in `github.txt`) |
@@ -143,7 +143,7 @@ How the tests stay fast and deterministic:
   a time, in throwaway copies. Every change had to make a test fail; the weak tests found this way were
   strengthened.
 
-The [testing guide](https://sassom2112-jhu-software-concepts.readthedocs.io/en/latest/testing.html) lists every marker,
+The [testing guide](https://sassom2112-jhu-software-concept.readthedocs.io/en/latest/testing.html) lists every marker,
 fixture and test double.
 
 ## 5. GitHub Actions
@@ -166,7 +166,7 @@ changes `module_4/` (or the workflow, or `.readthedocs.yaml`) the workflow:
 
 Sphinx sources are in `docs/source`, and the generated HTML is committed in `docs/build/html`
 (open `docs/build/html/index.html`). The published copy is on Read the Docs:
-**https://sassom2112-jhu-software-concepts.readthedocs.io/en/latest/**. It is built from `.readthedocs.yaml` at the
+**https://sassom2112-jhu-software-concept.readthedocs.io/en/latest/**. It is built from `.readthedocs.yaml` at the
 repository root, with warnings treated as errors.
 
 | Page | Contents |
