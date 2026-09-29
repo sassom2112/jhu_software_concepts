@@ -1,0 +1,77 @@
+# Module 4 CI: start PostgreSQL, run the whole pytest suite (100% coverage required), build the docs.
+#
+# GitHub only runs workflows from .github/workflows at the repository root, so this file is the
+# one that runs.  module_4/.github/workflows/tests.yml is an identical copy kept with the
+# assignment; the step right after checkout fails if the two ever differ.
+name: tests
+
+on:
+  push:
+    paths: ["module_4/**", ".github/workflows/tests.yml", ".readthedocs.yaml"]
+  pull_request:
+    paths: ["module_4/**", ".github/workflows/tests.yml", ".readthedocs.yaml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: gradcafe
+          POSTGRES_DB: gradcafe_test              # the tests only run against a *_test database
+          POSTGRES_HOST_AUTH_METHOD: trust        # throwaway container: no password to store anywhere
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gradcafe -d gradcafe_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://gradcafe@localhost:5432/gradcafe_test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: The workflow copy under module_4 matches this file
+        run: cmp .github/workflows/tests.yml module_4/.github/workflows/tests.yml
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: module_4/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r module_4/requirements.txt
+
+      - name: Run the test suite (from the repository root, as pytest.ini expects)
+        run: pytest module_4 -m "web or buttons or analysis or db or integration"
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            module_4/requirements.txt
+            module_4/docs/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r module_4/requirements.txt -r module_4/docs/requirements.txt
+
+      - name: Build the Sphinx documentation (warnings are errors)
+        run: sphinx-build -W -b html module_4/docs/source module_4/docs/build/html

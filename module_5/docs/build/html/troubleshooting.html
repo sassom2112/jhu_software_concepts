@@ -1,0 +1,241 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f46eefca"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Testing guide" href="testing.html" />
+    <link rel="prev" title="Operational notes" href="operations.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Operational notes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-tests-locally">Running the tests locally</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-application">Running the application</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#github-actions">GitHub Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#read-the-docs">Read the Docs</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Troubleshooting</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="troubleshooting">
+<h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h1>
+<section id="running-the-tests-locally">
+<h2>Running the tests locally<a class="headerlink" href="#running-the-tests-locally" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>pytest reports “collected 0 items”.</strong></dt><dd><p>pytest only collects files named <code class="docutils literal notranslate"><span class="pre">test_*.py</span></code> (or <code class="docutils literal notranslate"><span class="pre">*_test.py</span></code>) under
+the path you pass. Check the file name (<code class="docutils literal notranslate"><span class="pre">smoketest.py</span></code> is skipped;
+<code class="docutils literal notranslate"><span class="pre">test_smoke.py</span></code> is collected) and pass <code class="docutils literal notranslate"><span class="pre">module_4</span></code> as the path.</p>
+</dd>
+<dt><strong>“Coverage failure” or “module module_4/src was never imported” although tests pass.</strong></dt><dd><p>The run started in the wrong folder. <code class="docutils literal notranslate"><span class="pre">pytest.ini</span></code> measures
+<code class="docutils literal notranslate"><span class="pre">--cov=module_4/src</span></code> relative to the directory pytest starts in. Run from
+the repository root, as in <a class="reference internal" href="testing.html"><span class="doc">Testing guide</span></a>, not from inside <code class="docutils literal notranslate"><span class="pre">module_4</span></code>.</p>
+</dd>
+<dt><strong>“refusing to run database tests against ‘gradcafe’”.</strong></dt><dd><p>This is the safety guard working. The database tests empty the
+<code class="docutils literal notranslate"><span class="pre">applicants</span></code> table, so they run only against a database whose name ends
+in <code class="docutils literal notranslate"><span class="pre">_test</span></code>. Put <code class="docutils literal notranslate"><span class="pre">DATABASE_URL=postgresql://gradcafe&#64;localhost:5432/gradcafe_test</span></code>
+in front of the command, and create that database once with
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">exec</span> <span class="pre">gradcafe-postgres</span> <span class="pre">createdb</span> <span class="pre">-U</span> <span class="pre">gradcafe</span> <span class="pre">gradcafe_test</span></code>.</p>
+</dd>
+<dt><strong>“database “gradcafe_test” does not exist”.</strong></dt><dd><p>Create it with the <code class="docutils literal notranslate"><span class="pre">createdb</span></code> command above.</p>
+</dd>
+<dt><strong>“password authentication failed” or “fe_sendauth: no password supplied”.</strong></dt><dd><p>libpq did not find the password. Add
+<code class="docutils literal notranslate"><span class="pre">localhost:5432:*:gradcafe:YOUR_PASSWORD</span></code> to <code class="docutils literal notranslate"><span class="pre">~/.pgpass</span></code>. The <code class="docutils literal notranslate"><span class="pre">*</span></code>
+covers both <code class="docutils literal notranslate"><span class="pre">gradcafe</span></code> and <code class="docutils literal notranslate"><span class="pre">gradcafe_test</span></code>. Then run
+<code class="docutils literal notranslate"><span class="pre">chmod</span> <span class="pre">600</span> <span class="pre">~/.pgpass</span></code>, because libpq ignores the file if other users can
+read it. Or export <code class="docutils literal notranslate"><span class="pre">PGPASSWORD</span></code> for the current shell only.</p>
+</dd>
+<dt><strong>“connection failed … Connection refused”.</strong></dt><dd><p>PostgreSQL is not running or not on that port. Start it with
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">start</span> <span class="pre">gradcafe-postgres</span></code>, and check it with
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> or <code class="docutils literal notranslate"><span class="pre">pg_isready</span> <span class="pre">-h</span> <span class="pre">localhost</span></code>.</p>
+</dd>
+<dt><strong>“ModuleNotFoundError: No module named ‘webapp’” (or ‘scrape’, ‘load_data’).</strong></dt><dd><p><code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code> puts <code class="docutils literal notranslate"><span class="pre">module_4/src</span></code> on <code class="docutils literal notranslate"><span class="pre">sys.path</span></code>. Make sure
+<code class="docutils literal notranslate"><span class="pre">conftest.py</span></code> is still in <code class="docutils literal notranslate"><span class="pre">module_4/tests</span></code> and has not been renamed.</p>
+</dd>
+<dt><strong>The editor underlines “import webapp” or “import pytest” as unresolved, but pytest runs fine.</strong></dt><dd><p>The editor is using a different Python. In VS Code, run <em>Python: Select
+Interpreter</em>, choose <code class="docutils literal notranslate"><span class="pre">module_4/.venv/bin/python</span></code>, and add
+<code class="docutils literal notranslate"><span class="pre">module_4/src</span></code> to <code class="docutils literal notranslate"><span class="pre">python.analysis.extraPaths</span></code>.</p>
+</dd>
+<dt><strong>A single test passes alone but fails in the full run (or the other way round).</strong></dt><dd><p>Some test shares state with another. The suite is written so that this
+never happens: every fixture is function-scoped except the read-only
+<code class="docutils literal notranslate"><span class="pre">database_url</span></code>, files go under <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code>, and <code class="docutils literal notranslate"><span class="pre">monkeypatch</span></code>
+restores everything. Look for a new test that writes outside <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code>
+or changes a module attribute without <code class="docutils literal notranslate"><span class="pre">monkeypatch</span></code>.</p>
+</dd>
+</dl>
+</section>
+<section id="running-the-application">
+<h2>Running the application<a class="headerlink" href="#running-the-application" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>The page shows “The analysis could not be loaded because the database is not reachable”.</strong></dt><dd><p>The page is working, but the query failed. The name in brackets (for
+example <code class="docutils literal notranslate"><span class="pre">OperationalError</span></code>) says why. Check that PostgreSQL is running
+and that <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> or the <code class="docutils literal notranslate"><span class="pre">PG*</span></code> variables point at the database
+that holds the data.</p>
+</dd>
+<dt><strong>Every count on the page is 0.</strong></dt><dd><p>The table is empty. Load the Module 2 data with <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">src/load_data.py</span></code>
+(see <a class="reference internal" href="overview.html"><span class="doc">Overview and setup</span></a>).</p>
+</dd>
+<dt><strong>python src/load_data.py says “cannot read input”.</strong></dt><dd><p>The input file is looked up by its bare name in the <code class="docutils literal notranslate"><span class="pre">module_4</span></code> folder.
+Check that <code class="docutils literal notranslate"><span class="pre">llm_extend_applicant_data.json</span></code> is there, or pass
+<code class="docutils literal notranslate"><span class="pre">--file</span> <span class="pre">NAME</span></code> with a file that is.</p>
+</dd>
+<dt><strong>Pull Data says “already running; this click did nothing”.</strong></dt><dd><p>Another pull is in progress, possibly started from another browser tab.
+That is the busy-state policy (see <a class="reference internal" href="operations.html"><span class="doc">Operational notes</span></a>). Wait for it to
+finish.</p>
+</dd>
+<dt><strong>Pull Data fails with “robots.txt does not allow…” or “HTTP 403 … Cloudflare”.</strong></dt><dd><p>Grad Café refused the scraper, or could not confirm that it is allowed.
+The scraper never retries a block or tries to get around one. Try again
+later. Nothing was written.</p>
+</dd>
+<dt><strong>“Address already in use” when starting the page.</strong></dt><dd><p>Something else is using port 8080. Start on another port with
+<code class="docutils literal notranslate"><span class="pre">PORT=8081</span> <span class="pre">python</span> <span class="pre">src/run.py</span></code>, or find the other process with
+<code class="docutils literal notranslate"><span class="pre">ss</span> <span class="pre">-ltnp</span> <span class="pre">|</span> <span class="pre">grep</span> <span class="pre">8080</span></code>.</p>
+</dd>
+</dl>
+</section>
+<section id="github-actions">
+<h2>GitHub Actions<a class="headerlink" href="#github-actions" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>The workflow does not run at all.</strong></dt><dd><p>GitHub runs only workflows under <code class="docutils literal notranslate"><span class="pre">.github/workflows</span></code> at the repository
+root. The copy in <code class="docutils literal notranslate"><span class="pre">module_4/.github/workflows</span></code> is the graded deliverable,
+and CI checks that the two are identical. The workflow is also limited to
+pushes that change <code class="docutils literal notranslate"><span class="pre">module_4/</span></code>, the workflow file or
+<code class="docutils literal notranslate"><span class="pre">.readthedocs.yaml</span></code>. To run it by hand, use <em>Run workflow</em> on the
+Actions tab.</p>
+</dd>
+<dt><strong>“refusing to run database tests” in CI.</strong></dt><dd><p>The job’s <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> must name the service’s <code class="docutils literal notranslate"><span class="pre">gradcafe_test</span></code>
+database. The service container creates it through <code class="docutils literal notranslate"><span class="pre">POSTGRES_DB</span></code>.</p>
+</dd>
+<dt><strong>Database tests fail with “Connection refused” in the first seconds of the job.</strong></dt><dd><p>The service is not ready yet. The workflow’s <code class="docutils literal notranslate"><span class="pre">--health-cmd</span> <span class="pre">pg_isready</span></code>
+options make GitHub wait for it, so keep them if you edit the service.</p>
+</dd>
+<dt><strong>The step “The workflow copy under module_4 matches this file” fails (”… differ: byte N, line M”).</strong></dt><dd><p>Copy the root workflow over the module copy
+(<code class="docutils literal notranslate"><span class="pre">cp</span> <span class="pre">.github/workflows/tests.yml</span> <span class="pre">module_4/.github/workflows/tests.yml</span></code>)
+and commit both.</p>
+</dd>
+<dt><strong>Coverage is 100% locally but not in CI.</strong></dt><dd><p>A source file or test that exists only on your machine was never
+committed. <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">status</span></code> shows it.</p>
+</dd>
+</dl>
+</section>
+<section id="read-the-docs">
+<h2>Read the Docs<a class="headerlink" href="#read-the-docs" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>The build cannot import the modules for the API reference.</strong></dt><dd><p><code class="docutils literal notranslate"><span class="pre">.readthedocs.yaml</span></code> installs both <code class="docutils literal notranslate"><span class="pre">module_4/requirements.txt</span></code> (the
+application’s own packages, which autodoc imports) and
+<code class="docutils literal notranslate"><span class="pre">module_4/docs/requirements.txt</span></code> (Sphinx and the theme).
+<code class="docutils literal notranslate"><span class="pre">docs/source/conf.py</span></code> puts <code class="docutils literal notranslate"><span class="pre">module_4/src</span></code> on <code class="docutils literal notranslate"><span class="pre">sys.path</span></code>. Importing
+the modules needs no database: <code class="docutils literal notranslate"><span class="pre">models.py</span></code> creates its engine without
+connecting.</p>
+</dd>
+<dt><strong>The build fails on a warning.</strong></dt><dd><p>Warnings are errors (<code class="docutils literal notranslate"><span class="pre">fail_on_warning:</span> <span class="pre">true</span></code>), to match
+<code class="docutils literal notranslate"><span class="pre">sphinx-build</span> <span class="pre">-W</span></code> locally and in CI. Run the local build to see the
+warning’s file and line.</p>
+</dd>
+<dt><strong>Read the Docs cannot see the repository.</strong></dt><dd><p>Read the Docs can only build from a public repository, or a private one on
+a paid plan. Make the GitHub repository public, then import it at
+<a class="reference external" href="https://app.readthedocs.org/dashboard/import/">https://app.readthedocs.org/dashboard/import/</a>.</p>
+</dd>
+</dl>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="operations.html" class="btn btn-neutral float-left" title="Operational notes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="testing.html" class="btn btn-neutral float-right" title="Testing guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

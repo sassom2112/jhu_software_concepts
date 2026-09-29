@@ -1,0 +1,549 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ETL layer &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f46eefca"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Database and analysis layer" href="database.html" />
+    <link rel="prev" title="Web layer" href="web.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../testing.html">Testing guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="web.html">Web layer</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ETL layer</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#module-scrape">Scraping</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.ScrapeBlockedError"><code class="docutils literal notranslate"><span class="pre">ScrapeBlockedError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.ScrapeNetworkError"><code class="docutils literal notranslate"><span class="pre">ScrapeNetworkError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.ScrapeStateError"><code class="docutils literal notranslate"><span class="pre">ScrapeStateError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.save_data"><code class="docutils literal notranslate"><span class="pre">save_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.load_data"><code class="docutils literal notranslate"><span class="pre">load_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.GradCafeScraper"><code class="docutils literal notranslate"><span class="pre">GradCafeScraper</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scrape.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-clean">Cleaning</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#clean.clean_data"><code class="docutils literal notranslate"><span class="pre">clean_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#clean.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-load_data">Loading</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.record_to_row"><code class="docutils literal notranslate"><span class="pre">record_to_row()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.connect"><code class="docutils literal notranslate"><span class="pre">connect()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.create_table"><code class="docutils literal notranslate"><span class="pre">create_table()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.load_records"><code class="docutils literal notranslate"><span class="pre">load_records()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.count_rows"><code class="docutils literal notranslate"><span class="pre">count_rows()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.fetch_applicants"><code class="docutils literal notranslate"><span class="pre">fetch_applicants()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_data.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="database.html">Database and analysis layer</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API reference</a></li>
+      <li class="breadcrumb-item active">ETL layer</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="etl-layer">
+<h1>ETL layer<a class="headerlink" href="#etl-layer" title="Link to this heading"></a></h1>
+<section id="module-scrape">
+<span id="scraping"></span><h2>Scraping<a class="headerlink" href="#module-scrape" title="Link to this heading"></a></h2>
+<p>scrape.py - Grad Cafe admissions-results scraper.</p>
+<p>JHU EN.605.256 Modern Software Concepts in Python - Module 2.</p>
+<p>Workflow (urllib-only; no browser automation was needed for this site):</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>Fetch <a class="reference external" href="https://www.thegradcafe.com/robots.txt">https://www.thegradcafe.com/robots.txt</a> with urllib and confirm with
+urllib.robotparser (plus an RFC 9309 longest-match check) that the survey
+listing is allowed for our user agent.</p></li>
+<li><p>Build the first listing URL with urllib.parse and fetch it with
+urllib.request.</p></li>
+<li><p>Parse the server-rendered HTML with BeautifulSoup into “raw” entry dicts
+(every value is the visible text exactly as shown on the listing row),
+and keep the page’s own JSON record of each entry next to it.</p></li>
+<li><p>Follow the page’s “Next” link (Grad Cafe uses cursor-based pagination, so
+the next URL is read from the page rather than computed) until the target
+number of entries has been collected, sleeping between requests.</p></li>
+<li><p>Persist progress after every page (JSONL + checkpoint + a copy of the
+HTML) so an interrupted run picks up where it left off, then write the
+raw entries to JSON and hand them to clean.py.</p></li>
+</ol>
+</div></blockquote>
+<p>The scraper never tries to get around a block: a 401/403/429 response or a
+Cloudflare challenge page stops the run immediately; a 5xx or a network error
+is retried only a couple of times, slowly.  Re-running the script later
+resumes from the saved checkpoint.</p>
+<p>Public API used by clean.py and the instructor’s tooling:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>GradCafeScraper.scrape_data()  -&gt; list[dict]
+save_data(entries, path)       -&gt; None
+load_data(path)                -&gt; list[dict]
+</pre></div>
+</div>
+<dl class="py exception">
+<dt class="sig sig-object py" id="scrape.ScrapeBlockedError">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">ScrapeBlockedError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retryable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#ScrapeBlockedError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.ScrapeBlockedError" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code></p>
+<p>The site blocked, rate-limited, challenged, or failed a request.</p>
+<p><code class="docutils literal notranslate"><span class="pre">retryable</span></code> is True only for a plain 5xx server error (retried once);
+401/403/429 and challenge pages are never retried.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>message</strong> (<em>str</em>)</p></li>
+<li><p><strong>status</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>retryable</strong> (<em>bool</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="scrape.ScrapeNetworkError">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">ScrapeNetworkError</span></span><a class="reference internal" href="../_modules/scrape.html#ScrapeNetworkError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.ScrapeNetworkError" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code></p>
+<p>The network kept failing (timeouts / connection errors); resume later.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="scrape.ScrapeStateError">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">ScrapeStateError</span></span><a class="reference internal" href="../_modules/scrape.html#ScrapeStateError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.ScrapeStateError" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code></p>
+<p>Local progress files are inconsistent; the user has to decide what to do.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="scrape.save_data">
+<span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">save_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entries</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#save_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.save_data" title="Link to this definition"></a></dt>
+<dd><p>Write a list of entry dicts to <em>path</em> as pretty-printed UTF-8 JSON.</p>
+<p>A path ending in “.gz” is written gzip-compressed (same JSON inside).  The
+file is written to a temporary name first and then renamed, so a crash can
+never leave a half-written JSON file behind.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>entries</strong> (<em>list</em><em>[</em><em>dict</em><em>]</em>)</p></li>
+<li><p><strong>path</strong> (<em>str</em><em> | </em><em>Path</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="scrape.load_data">
+<span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#load_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.load_data" title="Link to this definition"></a></dt>
+<dd><p>Read a JSON list of entry dicts from <em>path</em> (plain or “.gz”).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>str</em><em> | </em><em>Path</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="scrape.GradCafeScraper">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">GradCafeScraper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_entries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delay_seconds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'data'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_pages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_html</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#GradCafeScraper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.GradCafeScraper" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Collects raw admissions entries from the Grad Cafe survey listing.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_entries</strong> (<em>int</em>)</p></li>
+<li><p><strong>delay_seconds</strong> (<em>float</em>)</p></li>
+<li><p><strong>data_dir</strong> (<em>str</em><em> | </em><em>Path</em>)</p></li>
+<li><p><strong>max_pages</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>cache_html</strong> (<em>bool</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="scrape.GradCafeScraper.check_robots">
+<span class="sig-name descname"><span class="pre">check_robots</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#GradCafeScraper.check_robots"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.GradCafeScraper.check_robots" title="Link to this definition"></a></dt>
+<dd><p>Fetch robots.txt, save a copy as evidence, and verify our access.</p>
+<p>Returns True when the survey listing and result pages are allowed for
+this scraper’s user agent.  A copy of the file is written to
+data/robots.txt so the check is reproducible.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="scrape.GradCafeScraper.reparse_cached_pages">
+<span class="sig-name descname"><span class="pre">reparse_cached_pages</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#GradCafeScraper.reparse_cached_pages"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.GradCafeScraper.reparse_cached_pages" title="Link to this definition"></a></dt>
+<dd><p>Rebuild the raw entries from data/raw_html without any network access.</p>
+<p>Useful after changing the parser: the pages already on disk are parsed
+again in the order they were fetched and de-duplicated by result id.
+Each entry keeps the fetch time recorded in the cache file header (or
+the file’s modification time for older cache files).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="scrape.GradCafeScraper.scrape_new_entries">
+<span class="sig-name descname"><span class="pre">scrape_new_entries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">known_ids</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_pages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_url</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#GradCafeScraper.scrape_new_entries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.GradCafeScraper.scrape_new_entries" title="Link to this definition"></a></dt>
+<dd><p>Fetch only entries that are not stored yet (Module 3 “Pull Data”).</p>
+<p>The listing is ordered newest first.  Starting at the first page (or at
+<code class="docutils literal notranslate"><span class="pre">start_url</span></code>, a “Next” link saved by an earlier run that ran out of
+pages), the scraper follows the “Next” links and stops at the first page
+containing an entry whose result id is already known: everything after
+it is older.  It never touches the checkpoint or progress files of a
+full scrape; robots.txt, the politeness delay and the stop-on-block
+rules apply exactly as in scrape_data().</p>
+<p>Returns (new raw entries, pages fetched, resume_url).  resume_url is the
+next page to fetch when <code class="docutils literal notranslate"><span class="pre">max_pages</span></code> ran out before a known entry was
+reached, so a later run can fill the gap; otherwise it is None.
+<code class="docutils literal notranslate"><span class="pre">progress</span></code> is an optional callback: progress(pages_fetched, new_entries_so_far).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>known_ids</strong> (<em>set</em><em>[</em><em>int</em><em>]</em>)</p></li>
+<li><p><strong>max_pages</strong> (<em>int</em>)</p></li>
+<li><p><strong>start_url</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[list[dict], int, str | None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="scrape.GradCafeScraper.scrape_data">
+<span class="sig-name descname"><span class="pre">scrape_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resume</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#GradCafeScraper.scrape_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.GradCafeScraper.scrape_data" title="Link to this definition"></a></dt>
+<dd><p>Pull listing pages until <em>target_entries</em> raw entries are collected.</p>
+<p>With resume=True (default) a previous interrupted run is continued from
+its checkpoint.  Returns the accumulated list of raw entry dicts; the
+same list is also streamed to data/raw_entries.jsonl as it grows.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>resume</strong> (<em>bool</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="scrape.main">
+<span class="sig-prename descclassname"><span class="pre">scrape.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scrape.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scrape.main" title="Link to this definition"></a></dt>
+<dd><p>Run a scrape (or a cache re-parse), save the raw JSON, then clean it.</p>
+<p>Exit codes: 0 ok, 2 the site rejected a request, 3 the network kept
+failing, 4 an unexpected HTTP status, 5 inconsistent local files,
+130 interrupted.  Progress is always saved, so re-running resumes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-clean">
+<span id="cleaning"></span><h2>Cleaning<a class="headerlink" href="#module-clean" title="Link to this heading"></a></h2>
+<p>clean.py - Convert raw Grad Cafe listing entries into structured records.</p>
+<p>JHU EN.605.256 Modern Software Concepts in Python - Module 2.</p>
+<dl class="simple">
+<dt>Input<span class="classifier">the raw entry dicts produced by scrape.py (visible listing text plus</span></dt><dd><p>the page’s own JSON record of the entry when it was available).</p>
+</dd>
+<dt>Output: one dict per applicant with typed, consistently named fields.  Every</dt><dd><p>raw string is carried along unchanged under the “raw” key so any cleaned
+value can be traced back to what the website showed.</p>
+</dd>
+</dl>
+<p>Missing or unavailable values are always represented as None (JSON null).</p>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python clean.py                      # data/raw_entries.json[.gz] -&gt; applicant_data.json
+python clean.py --input X --output Y
+</pre></div>
+</div>
+<dl class="py function">
+<dt class="sig sig-object py" id="clean.clean_data">
+<span class="sig-prename descclassname"><span class="pre">clean.</span></span><span class="sig-name descname"><span class="pre">clean_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_entries</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clean.html#clean_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clean.clean_data" title="Link to this definition"></a></dt>
+<dd><p>Convert every raw listing entry into a structured applicant record.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>raw_entries</strong> (<em>list</em><em>[</em><em>dict</em><em>]</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="clean.main">
+<span class="sig-prename descclassname"><span class="pre">clean.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clean.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clean.main" title="Link to this definition"></a></dt>
+<dd><p>Read the raw entries, clean them, and write applicant_data.json.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-load_data">
+<span id="loading"></span><h2>Loading<a class="headerlink" href="#module-load_data" title="Link to this heading"></a></h2>
+<p>load_data.py - Load the cleaned Grad Cafe data into PostgreSQL.</p>
+<p>JHU EN.605.256 Modern Software Concepts in Python - Module 3.</p>
+<p>Reads the Module 2 output (llm_extend_applicant_data.json by default: the
+cleaned records plus the LLM-standardized program and university) and loads it
+into a single table, <cite>applicants</cite>, using psycopg 3.</p>
+<dl class="simple">
+<dt>Design:</dt><dd><ul class="simple">
+<li><p>The table is created if it does not exist (see CREATE_TABLE_SQL).</p></li>
+<li><p>p_id is Grad Cafe’s own result id (the number in the entry’s URL), so it is
+a natural, stable primary key: the same entry always gets the same p_id.</p></li>
+<li><p>Rows are bulk-copied into a temporary staging table and then inserted with
+INSERT … ON CONFLICT (p_id) DO NOTHING.  Running the loader again, or
+loading a file that overlaps the database, never creates duplicates and
+never overwrites rows that are already stored.</p></li>
+<li><p>Missing values become SQL NULL; numbers that cannot be parsed become NULL
+instead of aborting the load; NUL characters (which PostgreSQL text cannot
+store) are removed from strings.</p></li>
+<li><p>The whole load is one transaction: it either completes or changes nothing.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python load_data.py                                   # llm_extend_applicant_data.json
+python load_data.py --file applicant_data.json        # works without LLM columns too
+python load_data.py --reset                           # drop and recreate the table first
+</pre></div>
+</div>
+<p>Connection settings come from the environment (see db_config.py); no password
+is stored in this repository.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.record_to_row">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">record_to_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#record_to_row"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.record_to_row" title="Link to this definition"></a></dt>
+<dd><p>Map one cleaned Module 2 record onto the applicants columns (None if unusable).</p>
+<p><cite>program</cite> keeps the combined “Program, University” text from Module 2; for
+the few entries whose program name is blank on Grad Cafe it falls back to
+the university so the column still identifies the school.  The LLM columns
+accept both the Module 2 spelling (llm-generated-program) and the column
+spelling (llm_generated_program).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>record</strong> (<em>dict</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.connect">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">connect</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#connect"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.connect" title="Link to this definition"></a></dt>
+<dd><p>Open a psycopg connection using the environment (see db_config.py).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Connection</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.create_table">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">create_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#create_table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.create_table" title="Link to this definition"></a></dt>
+<dd><p>Create the applicants table (optionally dropping it first).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>conn</strong> (<em>Connection</em>)</p></li>
+<li><p><strong>reset</strong> (<em>bool</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.load_records">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">load_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">records</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#load_records"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.load_records" title="Link to this definition"></a></dt>
+<dd><p>Insert records that are not in the table yet.</p>
+<p>Returns (inserted, already_present, unusable).  Existing rows are never
+modified.  The caller controls the transaction.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>conn</strong> (<em>Connection</em>)</p></li>
+<li><p><strong>records</strong> (<em>Iterable</em><em>[</em><em>dict</em><em>]</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[int, int, int]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.count_rows">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">count_rows</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conn</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#count_rows"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.count_rows" title="Link to this definition"></a></dt>
+<dd><p>Number of rows currently stored in the applicants table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>conn</strong> (<em>Connection</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.fetch_applicants">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">fetch_applicants</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conn</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#fetch_applicants"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.fetch_applicants" title="Link to this definition"></a></dt>
+<dd><p>Every stored row as a dict keyed by the Module 3 column names, newest p_id first.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>conn</strong> (<em>Connection</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="load_data.main">
+<span class="sig-prename descclassname"><span class="pre">load_data.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/load_data.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_data.main" title="Link to this definition"></a></dt>
+<dd><p>Command line: load a JSON file; returns 0, 1 (unreadable input), 2 (cannot connect) or 3 (rolled back).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="web.html" class="btn btn-neutral float-left" title="Web layer" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="database.html" class="btn btn-neutral float-right" title="Database and analysis layer" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
