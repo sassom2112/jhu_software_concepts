@@ -8,7 +8,9 @@ keyword argument with a production default, so tests can call::
     create_app(scrape_fn=fake_scrape, load_fn=fake_load, query_fn=fake_query)
 
 and get a fully working Flask app wired to fakes, with no real network call
-and no real database required unless a test wants one.
+and no real database required unless a test wants one.  Importing this
+package imports orm_queries (and so models), which builds the SQLAlchemy
+engine but never opens a connection.
 """
 
 from __future__ import annotations
@@ -19,7 +21,10 @@ from typing import Callable
 
 from flask import Flask
 
+import orm_queries
+
 from . import services
+from .routes import bp
 
 ScrapeFn = Callable[[], list[dict]]
 LoadFn = Callable[[list[dict]], int]
@@ -55,14 +60,10 @@ def create_app(
     # create_app() call in a test starts idle regardless of other tests.
     app.pull_state = services.PullState()
 
-    from .routes import bp
-
     app.register_blueprint(bp)
     return app
 
 
 def _default_query_fn() -> dict:
-    """Deferred import: importing webapp must never require a live database."""
-    import orm_queries
-
+    """Production analysis query, looked up at call time (a live database is needed only now)."""
     return orm_queries.get_analysis()

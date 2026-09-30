@@ -12,10 +12,28 @@ Endpoints::
 from __future__ import annotations
 
 from datetime import datetime
+from http.client import HTTPException
 
+import psycopg
 from flask import Blueprint, current_app, jsonify, redirect, render_template, url_for
+from sqlalchemy.exc import SQLAlchemyError
 
 bp = Blueprint("analysis", __name__)
+
+# The failures a query or a pull can really raise: database errors from either
+# driver layer (psycopg directly, or wrapped by SQLAlchemy), OSError
+# (ConnectionError, PermissionError, urllib's URLError), HTTPException (a
+# response cut off mid-body), RuntimeError (the scraper's ScrapeBlockedError /
+# ScrapeNetworkError / ScrapeStateError) and ValueError (malformed data).
+# Anything else is a programming error and should surface as one.
+EXPECTED_FAILURES = (
+    psycopg.Error,
+    SQLAlchemyError,
+    OSError,
+    HTTPException,
+    RuntimeError,
+    ValueError,
+)
 
 
 @bp.get("/")
@@ -30,7 +48,7 @@ def index():
     analysis, error = None, None
     try:
         analysis = current_app.config["QUERY_FN"]()
-    except Exception as err:  # noqa: BLE001 - any query failure becomes a friendly banner, not a 500
+    except EXPECTED_FAILURES as err:  # a query failure becomes a friendly banner, not a 500
         error = ("The analysis could not be loaded because the database is not reachable. "
                  f"({err.__class__.__name__})")
     return render_template(
@@ -50,7 +68,7 @@ def pull_data():
     try:
         raw_entries = current_app.config["SCRAPE_FN"]()
         inserted = current_app.config["LOAD_FN"](raw_entries)
-    except Exception as err:  # noqa: BLE001 - report the failure; never crash the request
+    except EXPECTED_FAILURES as err:  # report the failure as JSON instead of an HTML 500 page
         return jsonify(ok=False, error=str(err)), 500
     finally:
         current_app.pull_state.finish()

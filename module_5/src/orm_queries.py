@@ -15,12 +15,14 @@ Console usage::
     python orm_queries.py --all    # all eleven questions (what the Flask page shows)
 """
 
+# SQLAlchemy generates func.count() & co. at runtime, so Pylint wrongly reports "not callable".
+# pylint: disable=not-callable
+
 from __future__ import annotations
 
 import argparse
 import sys
 from dataclasses import dataclass, field
-from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import Numeric, and_, cast, func, literal, or_, select
@@ -28,8 +30,8 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import analysis_common as rules
-from analysis_common import (QUESTIONS, format_average, format_count, format_difference, format_percent,
-                             format_table)
+from analysis_common import (QUESTIONS, format_average, format_average_with_count, format_count,
+                             format_difference, format_percent, print_answers)
 from db_config import describe_target
 from models import Applicant, SessionLocal
 
@@ -90,7 +92,10 @@ def _original_target_university():
 
 
 def _llm_target_university():
-    """The same four universities in the LLM-standardized name, which may be an acronym such as 'MIT'."""
+    """The same four universities in the LLM-standardized name.
+
+    That name may be an acronym such as 'MIT'.
+    """
     return _target_university(Applicant.llm_generated_university)
 
 
@@ -131,18 +136,25 @@ def q1_fall_2026_count(session: Session) -> int:
 
 
 def q2_percent_international(session: Session) -> tuple[int, int, Decimal | None]:
-    """Question 2: (international, classified, percent international) among entries with a nationality."""
+    """Question 2: (international, classified, percent international).
+
+    Only entries that provide a nationality classification are counted.
+    """
+    nationality = _normalized(Applicant.us_or_international)
     classified = func.count()
-    international = func.count().filter(_normalized(Applicant.us_or_international) == rules.INTERNATIONAL)
+    international = func.count().filter(nationality == rules.INTERNATIONAL)
     stmt = (
         select(international, classified, _rounded_percent(international, classified))
-        .where(_normalized(Applicant.us_or_international).in_(rules.NATIONALITY_CLASSES))
+        .where(nationality.in_(rules.NATIONALITY_CLASSES))
     )
     return tuple(session.execute(stmt).one())
 
 
 def q3_average_scores(session: Session) -> dict[str, tuple[Decimal | None, int]]:
-    """Question 3: {metric: (average on the official scale, number of values)} for GPA and the GRE scores."""
+    """Question 3: GPA and the three GRE scores.
+
+    Returns {metric: (average on the official scale, number of values)}.
+    """
     gpa, quant, verbal, writing = _valid_gpa(), _valid_section_score(Applicant.gre), \
         _valid_section_score(Applicant.gre_v), _valid_writing_score()
     stmt = select(
@@ -171,7 +183,10 @@ def q5_fall_2025_acceptance(session: Session) -> tuple[int, int, Decimal | None]
     """Question 5: (accepted, all, acceptance percent) for Fall 2025 entries."""
     total = func.count()
     accepted = func.count().filter(_is_accepted())
-    stmt = select(accepted, total, _rounded_percent(accepted, total)).where(_is_term(rules.FALL_2025))
+    stmt = (
+        select(accepted, total, _rounded_percent(accepted, total))
+        .where(_is_term(rules.FALL_2025))
+    )
     return tuple(session.execute(stmt).one())
 
 
@@ -200,32 +215,44 @@ def _q8_base_conditions():
 
 
 def q8_accepted_cs_phd_original(session: Session) -> int:
-    """Question 8: accepted Fall 2026 CS PhD entries at the four schools, from the original fields."""
+    """Question 8: accepted Fall 2026 CS PhD entries at the four schools (original fields)."""
     stmt = select(func.count()).select_from(Applicant).where(
-        and_(_q8_base_conditions(), _mentions_computer_science(Applicant.program), _original_target_university())
+        and_(
+            _q8_base_conditions(),
+            _mentions_computer_science(Applicant.program),
+            _original_target_university(),
+        )
     )
     return session.scalar(stmt) or 0
 
 
 def q9_accepted_cs_phd_llm(session: Session) -> tuple[int, int]:
     """Question 9: (original-field count, LLM-field count) for the Question 8 selection."""
-    original = func.count().filter(and_(_mentions_computer_science(Applicant.program), _original_target_university()))
-    llm = func.count().filter(and_(_mentions_computer_science(Applicant.llm_generated_program), _llm_target_university()))
+    original = func.count().filter(
+        and_(_mentions_computer_science(Applicant.program), _original_target_university())
+    )
+    llm = func.count().filter(
+        and_(_mentions_computer_science(Applicant.llm_generated_program), _llm_target_university())
+    )
     stmt = select(original, llm).where(_q8_base_conditions())
     return tuple(session.execute(stmt).one())
 
 
 def q10_degree_comparison(session: Session) -> list[tuple]:
-    """Question 10: (degree, entries, acceptances, percent, average accepted GPA) per degree with 100+ Fall 2026 entries."""
+    """Question 10: acceptance rate and accepted GPA per degree with 100+ Fall 2026 entries.
+
+    Returns (degree, entries, acceptances, percent, average accepted GPA) rows.
+    """
     entries = func.count()
     acceptances = func.count().filter(_is_accepted())
+    accepted_gpa = _rounded_average(Applicant.gpa, and_(_is_accepted(), _valid_gpa()))
     stmt = (
         select(
             Applicant.degree,
             entries.label("entries"),
             acceptances.label("acceptances"),
             _rounded_percent(acceptances, entries).label("acceptance_percent"),
-            _rounded_average(Applicant.gpa, and_(_is_accepted(), _valid_gpa())).label("avg_accepted_gpa"),
+            accepted_gpa.label("avg_accepted_gpa"),
         )
         .where(_is_term(rules.FALL_2026), Applicant.degree.is_not(None))
         .group_by(Applicant.degree)
@@ -236,7 +263,10 @@ def q10_degree_comparison(session: Session) -> list[tuple]:
 
 
 def q11_top_universities(session: Session) -> list[tuple]:
-    """Question 11: (university, entries, acceptances, percent) for the ten LLM-named schools with the most Fall 2026 entries."""
+    """Question 11: the ten LLM-named schools with the most Fall 2026 entries.
+
+    Returns (university, entries, acceptances, percent accepted) rows.
+    """
     entries = func.count()
     acceptances = func.count().filter(_is_accepted())
     stmt = (
@@ -269,57 +299,114 @@ def database_summary(session: Session) -> dict:
 # --------------------------------------------------------------------------- #
 
 
+def _answer(number: str, lines=None, columns=None, table=None) -> OrmAnswer:
+    """An OrmAnswer for question *number*, worded as in analysis_common.QUESTIONS."""
+    return OrmAnswer(number, QUESTIONS[number], lines or [], columns or [], table or [])
+
+
+# One builder per question: run the query and format its result for display.
+
+def _answer_q1(session: Session) -> OrmAnswer:
+    return _answer("1", [
+        ("Fall 2026 applicant count", format_count(q1_fall_2026_count(session))),
+    ])
+
+
+def _answer_q2(session: Session) -> OrmAnswer:
+    international, classified, percent = q2_percent_international(session)
+    return _answer("2", [
+        ("Percent international", format_percent(percent)),
+        ("International entries", format_count(international)),
+        ("Entries with a nationality classification", format_count(classified)),
+    ])
+
+
+def _answer_q3(session: Session) -> OrmAnswer:
+    labels = {"gpa": "Average GPA", "gre": "Average GRE Quantitative",
+              "gre_v": "Average GRE Verbal", "gre_aw": "Average GRE Analytical Writing"}
+    scores = q3_average_scores(session)
+    return _answer("3", [(labels[metric], format_average_with_count(average, n))
+                         for metric, (average, n) in scores.items()])
+
+
+def _answer_q4(session: Session) -> OrmAnswer:
+    average, n = q4_american_fall_2026_gpa(session)
+    return _answer("4", [
+        ("Average GPA of American Fall 2026 applicants", format_average(average)),
+        ("Applicants with a GPA", format_count(n)),
+    ])
+
+
+def _answer_q5(session: Session) -> OrmAnswer:
+    accepted, total, percent = q5_fall_2025_acceptance(session)
+    return _answer("5", [
+        ("Fall 2025 acceptance percentage", format_percent(percent)),
+        ("Accepted Fall 2025 entries", format_count(accepted)),
+        ("All Fall 2025 entries", format_count(total)),
+    ])
+
+
+def _answer_q6(session: Session) -> OrmAnswer:
+    average, n = q6_accepted_fall_2026_gpa(session)
+    return _answer("6", [
+        ("Average GPA of accepted Fall 2026 applicants", format_average(average)),
+        ("Applicants with a GPA", format_count(n)),
+    ])
+
+
+def _answer_q7(session: Session) -> OrmAnswer:
+    return _answer("7", [
+        ("JHU Computer Science master's entries", format_count(q7_jhu_cs_masters(session))),
+    ])
+
+
+def _answer_q8(session: Session) -> OrmAnswer:
+    return _answer("8", [
+        ("Accepted Fall 2026 CS PhD entries (original fields)",
+         format_count(q8_accepted_cs_phd_original(session))),
+    ])
+
+
+def _answer_q9(session: Session) -> OrmAnswer:
+    original, llm = q9_accepted_cs_phd_llm(session)
+    return _answer("9", [
+        ("Original-field count", format_count(original)),
+        ("LLM-field count", format_count(llm)),
+        ("Difference", format_difference(llm - original)),
+    ])
+
+
+def _answer_q10(session: Session) -> OrmAnswer:
+    columns = ["Degree", "Entries", "Acceptances", "Acceptance %", "Avg GPA (accepted)"]
+    table = [
+        [degree, format_count(entries), format_count(accepted), format_percent(percent),
+         format_average(gpa)]
+        for degree, entries, accepted, percent, gpa in q10_degree_comparison(session)
+    ]
+    return _answer("10", columns=columns, table=table)
+
+
+def _answer_q11(session: Session) -> OrmAnswer:
+    columns = ["University", "Entries", "Acceptances", "Acceptance %"]
+    table = [
+        [university, format_count(entries), format_count(accepted), format_percent(percent)]
+        for university, entries, accepted, percent in q11_top_universities(session)
+    ]
+    return _answer("11", columns=columns, table=table)
+
+
+# In question order: build_answers keeps this order whatever order it is asked in.
+ANSWER_BUILDERS = {
+    "1": _answer_q1, "2": _answer_q2, "3": _answer_q3, "4": _answer_q4,
+    "5": _answer_q5, "6": _answer_q6, "7": _answer_q7, "8": _answer_q8,
+    "9": _answer_q9, "10": _answer_q10, "11": _answer_q11,
+}
+
+
 def build_answers(session: Session, numbers: tuple[str, ...] | None = None) -> list[OrmAnswer]:
     """Compute and format the requested questions (all eleven by default)."""
     wanted = set(numbers or QUESTIONS.keys())
-    answers: list[OrmAnswer] = []
-
-    def add(number: str, lines=None, columns=None, table=None):
-        answers.append(OrmAnswer(number, QUESTIONS[number], lines or [], columns or [], table or []))
-
-    if "1" in wanted:
-        add("1", [("Fall 2026 applicant count", format_count(q1_fall_2026_count(session)))])
-    if "2" in wanted:
-        international, classified, percent = q2_percent_international(session)
-        add("2", [("Percent international", format_percent(percent)),
-                  ("International entries", format_count(international)),
-                  ("Entries with a nationality classification", format_count(classified))])
-    if "3" in wanted:
-        scores = q3_average_scores(session)
-        labels = {"gpa": "Average GPA", "gre": "Average GRE Quantitative",
-                  "gre_v": "Average GRE Verbal", "gre_aw": "Average GRE Analytical Writing"}
-        add("3", [(labels[k], f"{format_average(v)} (n = {format_count(n)})") for k, (v, n) in scores.items()])
-    if "4" in wanted:
-        average, n = q4_american_fall_2026_gpa(session)
-        add("4", [("Average GPA of American Fall 2026 applicants", format_average(average)),
-                  ("Applicants with a GPA", format_count(n))])
-    if "5" in wanted:
-        accepted, total, percent = q5_fall_2025_acceptance(session)
-        add("5", [("Fall 2025 acceptance percentage", format_percent(percent)),
-                  ("Accepted Fall 2025 entries", format_count(accepted)),
-                  ("All Fall 2025 entries", format_count(total))])
-    if "6" in wanted:
-        average, n = q6_accepted_fall_2026_gpa(session)
-        add("6", [("Average GPA of accepted Fall 2026 applicants", format_average(average)),
-                  ("Applicants with a GPA", format_count(n))])
-    if "7" in wanted:
-        add("7", [("JHU Computer Science master's entries", format_count(q7_jhu_cs_masters(session)))])
-    if "8" in wanted:
-        add("8", [("Accepted Fall 2026 CS PhD entries (original fields)",
-                   format_count(q8_accepted_cs_phd_original(session)))])
-    if "9" in wanted:
-        original, llm = q9_accepted_cs_phd_llm(session)
-        add("9", [("Original-field count", format_count(original)), ("LLM-field count", format_count(llm)),
-                  ("Difference", format_difference(llm - original))])
-    if "10" in wanted:
-        rows = q10_degree_comparison(session)
-        add("10", columns=["Degree", "Entries", "Acceptances", "Acceptance %", "Avg GPA (accepted)"],
-            table=[[d, format_count(e), format_count(a), format_percent(p), format_average(g)] for d, e, a, p, g in rows])
-    if "11" in wanted:
-        rows = q11_top_universities(session)
-        add("11", columns=["University", "Entries", "Acceptances", "Acceptance %"],
-            table=[[u, format_count(e), format_count(a), format_percent(p)] for u, e, a, p in rows])
-    return answers
+    return [build(session) for number, build in ANSWER_BUILDERS.items() if number in wanted]
 
 
 def get_analysis() -> dict:
@@ -333,20 +420,11 @@ def get_analysis() -> dict:
 # --------------------------------------------------------------------------- #
 
 
-def _print(answers: list[OrmAnswer], title: str) -> None:
-    print(title)
-    print("=" * len(title))
-    for answer in answers:
-        print(f"\nQuestion {answer.number}: {answer.question}")
-        for label, value in answer.lines:
-            print(f"  {label}: {value}")
-        if answer.table:
-            for table_line in format_table(answer.columns, answer.table):
-                print(f"  {table_line}")
-
-
 def main(argv: list[str] | None = None) -> int:
-    """Console entry point: print the required ORM questions (all eleven with ``--all``); returns the exit code."""
+    """Console entry point: print the required ORM questions (all eleven with ``--all``).
+
+    Returns the exit code: 0, 2 (cannot connect) or 3 (query failed).
+    """
     parser = argparse.ArgumentParser(description="Grad Café analysis with the SQLAlchemy ORM")
     parser.add_argument("--all", action="store_true", help="print all eleven questions")
     args = parser.parse_args(argv)
@@ -355,12 +433,13 @@ def main(argv: list[str] | None = None) -> int:
         with SessionLocal() as session:
             answers = build_answers(session, numbers)
     except OperationalError as err:
-        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err.orig}", file=sys.stderr)
+        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err.orig}",
+              file=sys.stderr)
         return 2
     except SQLAlchemyError as err:
         print(f"error: query failed: {err}", file=sys.stderr)
         return 3
-    _print(answers, "Grad Café analysis (SQLAlchemy ORM)")
+    print_answers(answers, "Grad Café analysis (SQLAlchemy ORM)")
     return 0
 
 

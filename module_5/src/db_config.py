@@ -18,15 +18,24 @@ the PGPASSWORD variable, so it never has to appear in a URL, a file in the
 repository, or a shell history.  Both psycopg (load_data.py, query_data.py)
 and SQLAlchemy's psycopg driver (models.py) go through libpq, so the same
 settings serve every part of the project.
+
+The command-line tools that talk to PostgreSQL through psycopg
+(query_data.py, build_query_results.py) open their connection with
+run_with_connection(), so they report an unusable setting, an unreachable
+server and a failed query with the same messages and exit codes.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import sys
+from collections.abc import Callable
+from typing import TypeVar
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from sqlalchemy.engine import URL
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = "5432"
@@ -44,6 +53,8 @@ INVALID_SETTINGS_MESSAGE = (
 # "postgresql+psycopg://" (SQLAlchemy style) is reduced to the scheme libpq understands.
 _DRIVER_SUFFIX = re.compile(r"^(postgres(?:ql)?)\+\w+://", re.IGNORECASE)
 
+T = TypeVar("T")
+
 
 def _pg_settings() -> dict[str, str]:
     return {
@@ -55,14 +66,18 @@ def _pg_settings() -> dict[str, str]:
 
 
 def get_database_url() -> str:
-    """Connection string for psycopg: DATABASE_URL (URL or key=value), else a key=value DSN from PG* variables."""
+    """Connection string for psycopg.
+
+    DATABASE_URL (a URL or a key=value string) when it is set, else a key=value
+    DSN built from the PG* variables.
+    """
     url = os.environ.get("DATABASE_URL", "").strip()
     if url:
         return _DRIVER_SUFFIX.sub(r"\1://", url, count=1)
     return make_conninfo(**_pg_settings())
 
 
-def get_sqlalchemy_url():
+def get_sqlalchemy_url() -> URL:
     """The same connection as a sqlalchemy.engine.URL that selects the psycopg (v3) driver.
 
     The settings are parsed by psycopg's own libpq-compatible parser and rebuilt
@@ -72,8 +87,6 @@ def get_sqlalchemy_url():
     the same connection error the psycopg scripts report.  Raises
     psycopg.ProgrammingError if the settings cannot be parsed at all.
     """
-    from sqlalchemy.engine import URL
-
     params = dict(conninfo_to_dict(get_database_url()))
     user = params.pop("user", None)
     password = params.pop("password", None)
@@ -94,7 +107,10 @@ def get_sqlalchemy_url():
 
 
 def describe_target() -> str:
-    """``user@host:port/dbname`` for messages; never raises and never shows a password or the raw setting."""
+    """``user@host:port/dbname`` for messages.
+
+    Never raises, and never shows a password or the raw setting.
+    """
     try:
         params = conninfo_to_dict(get_database_url())
     except (psycopg.ProgrammingError, ValueError):
@@ -104,3 +120,28 @@ def describe_target() -> str:
     port = params.get("port") or DEFAULT_PORT
     dbname = params.get("dbname") or DEFAULT_DATABASE
     return f"{user}@{host}:{port}/{dbname}"
+
+
+def run_with_connection(work: Callable[[psycopg.Connection], T]) -> tuple[int, T | None]:
+    """Run ``work(conn)`` on a new psycopg connection, for a command-line tool.
+
+    Returns ``(0, result)`` when everything worked.  Otherwise the reason is
+    printed to stderr and the pair is ``(exit code, None)``: 2 when the
+    settings cannot be parsed (they are never echoed) or the server cannot be
+    reached, 3 when a query fails.  The connection commits if *work* returns,
+    rolls back if it raises, and is closed either way.
+    """
+    try:
+        conn = psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
+    except psycopg.ProgrammingError:  # unparseable settings; do not echo them
+        print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
+        return 2, None
+    except psycopg.OperationalError as err:
+        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}", file=sys.stderr)
+        return 2, None
+    try:
+        with conn:
+            return 0, work(conn)
+    except psycopg.Error as err:
+        print(f"error: query failed: {err}", file=sys.stderr)
+        return 3, None

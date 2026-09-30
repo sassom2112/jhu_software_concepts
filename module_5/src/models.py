@@ -29,14 +29,17 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 import psycopg
 
-from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, get_sqlalchemy_url
+from db_config import (CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME,
+                       get_sqlalchemy_url)
 
 
-class Base(DeclarativeBase):
+# A declarative base only carries SQLAlchemy's mapping machinery; it needs no public methods.
+class Base(DeclarativeBase):  # pylint: disable=too-few-public-methods
     """Declarative base class for this project's ORM models."""
 
 
-class Applicant(Base):
+# A mapped class describes table columns; its behaviour comes from the SQLAlchemy Session.
+class Applicant(Base):  # pylint: disable=too-few-public-methods
     """One Grad Café admissions entry (a row of the applicants table)."""
 
     __tablename__ = TABLE_NAME
@@ -58,7 +61,8 @@ class Applicant(Base):
     llm_generated_university: Mapped[str | None] = mapped_column(Text)
 
     def __repr__(self) -> str:
-        return f"<Applicant p_id={self.p_id} program={self.program!r} status={self.status!r} term={self.term!r}>"
+        return (f"<Applicant p_id={self.p_id} program={self.program!r} "
+                f"status={self.status!r} term={self.term!r}>")
 
 
 # connect_timeout makes an unreachable host fail after 10 s (the same limit the
@@ -72,4 +76,5 @@ try:
 except (psycopg.ProgrammingError, ValueError, ArgumentError) as error:
     # Settings that cannot be parsed (bad escape, non-numeric port, ...): say so, never echo them.
     raise SystemExit(INVALID_SETTINGS_MESSAGE) from error
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+# The usual SQLAlchemy name for a session factory; callers import it as SessionLocal.
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)  # pylint: disable=invalid-name

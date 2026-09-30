@@ -23,6 +23,10 @@ from __future__ import annotations
 
 import threading
 
+import clean
+import load_data
+import scrape
+
 
 class PullState:
     """Tracks whether a pull is currently in progress, for one Flask process."""
@@ -53,17 +57,15 @@ class PullState:
 def default_scrape_fn() -> list[dict]:
     """Production scraper: entries newer than what PostgreSQL already has.
 
-    Imports are local so importing this module never requires network access
-    or a live database (tests never call this function; they inject fakes).
+    Importing this module never requires network access or a live database;
+    both are touched only when this function runs.  GradCafeScraper is looked
+    up on the scrape module at call time, so a test can monkeypatch it.
     """
-    from load_data import connect
-    from scrape import GradCafeScraper
-
-    with connect() as conn, conn.cursor() as cur:
+    with load_data.connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT p_id FROM applicants")
         known_ids = {row[0] for row in cur}
 
-    scraper = GradCafeScraper(cache_html=False)
+    scraper = scrape.GradCafeScraper(cache_html=False)
     entries, _pages, _resume_url = scraper.scrape_new_entries(known_ids, max_pages=50)
     return entries
 
@@ -76,13 +78,10 @@ def default_load_fn(raw_entries: list[dict]) -> int:
     llm_generated_program/llm_generated_university left NULL until that step
     is run, the same way any other not-yet-standardized row would.
     """
-    from clean import clean_data
-    from load_data import connect, create_table, load_records
-
     if not raw_entries:
         return 0
-    cleaned = clean_data(raw_entries)
-    with connect() as conn:
-        create_table(conn)
-        inserted, _present, _unusable = load_records(conn, cleaned)
+    cleaned = clean.clean_data(raw_entries)
+    with load_data.connect() as conn:
+        load_data.create_table(conn)
+        inserted, _present, _unusable = load_data.load_records(conn, cleaned)
     return inserted

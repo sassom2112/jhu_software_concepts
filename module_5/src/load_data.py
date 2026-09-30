@@ -44,8 +44,9 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME, describe_target, get_database_url
-from scrape import load_data as load_json  # Module 2 JSON reader (plain or .gz)
+from db_config import (CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME,
+                       describe_target, get_database_url)
+from jsonio import load_data as load_json  # Module 2 JSON reader (plain or .gz)
 
 # The module folder (module_4/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
@@ -118,9 +119,7 @@ def _float(value: object) -> float | None:
 
 def _date(value: object) -> date | None:
     """ISO 'YYYY-MM-DD' (optionally followed by a time) -> date; otherwise None."""
-    text = _text(value)
-    if not text:
-        return None
+    text = _text(value) or ""  # missing -> "", which fromisoformat rejects like any bad date
     try:
         return date.fromisoformat(text[:10])
     except ValueError:
@@ -208,14 +207,17 @@ def load_records(conn: psycopg.Connection, records: Iterable[dict]) -> tuple[int
     column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
     with conn.cursor() as cur:
         cur.execute(
-            sql.SQL("CREATE TEMP TABLE applicants_staging (LIKE {} INCLUDING DEFAULTS) ON COMMIT DROP")
+            sql.SQL("CREATE TEMP TABLE applicants_staging (LIKE {} INCLUDING DEFAULTS) "
+                    "ON COMMIT DROP")
             .format(sql.Identifier(TABLE_NAME))
         )
-        with cur.copy(sql.SQL("COPY applicants_staging ({}) FROM STDIN").format(column_list)) as copy:
+        copy_sql = sql.SQL("COPY applicants_staging ({}) FROM STDIN").format(column_list)
+        with cur.copy(copy_sql) as copy:
             for row in rows.values():
                 copy.write_row(row)
         cur.execute(
-            sql.SQL("INSERT INTO {} ({cols}) SELECT {cols} FROM applicants_staging ON CONFLICT (p_id) DO NOTHING")
+            sql.SQL("INSERT INTO {} ({cols}) SELECT {cols} FROM applicants_staging "
+                    "ON CONFLICT (p_id) DO NOTHING")
             .format(sql.Identifier(TABLE_NAME), cols=column_list)
         )
         inserted = cur.rowcount
@@ -233,7 +235,9 @@ def count_rows(conn: psycopg.Connection) -> int:
 def fetch_applicants(conn: psycopg.Connection) -> list[dict]:
     """Every stored row as a dict keyed by the Module 3 column names, newest p_id first."""
     column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
-    query = sql.SQL("SELECT {} FROM {} ORDER BY p_id DESC").format(column_list, sql.Identifier(TABLE_NAME))
+    query = sql.SQL("SELECT {} FROM {} ORDER BY p_id DESC").format(
+        column_list, sql.Identifier(TABLE_NAME)
+    )
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(query)
         return cur.fetchall()
@@ -253,10 +257,14 @@ def _local_file(name: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Command line: load a JSON file; returns 0, 1 (unreadable input), 2 (cannot connect) or 3 (rolled back)."""
+    """Command line: load a JSON file.
+
+    Returns 0, 1 (unreadable input), 2 (cannot connect) or 3 (rolled back).
+    """
     parser = argparse.ArgumentParser(description="Load cleaned Grad Cafe data into PostgreSQL")
     parser.add_argument("--file", default=DEFAULT_INPUT,
-                        help=f"JSON (or .json.gz) file name in the module folder (default {DEFAULT_INPUT})")
+                        help="JSON (or .json.gz) file name in the module folder "
+                             f"(default {DEFAULT_INPUT})")
     parser.add_argument("--reset", action="store_true",
                         help="drop and recreate the applicants table before loading")
     args = parser.parse_args(argv)
@@ -274,8 +282,10 @@ def main(argv: list[str] | None = None) -> int:
         print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
         return 2
     except psycopg.OperationalError as err:
-        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}".strip(), file=sys.stderr)
-        print("hint: start the database and set DATABASE_URL or PGHOST/PGUSER/PGDATABASE (see README)", file=sys.stderr)
+        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}".strip(),
+              file=sys.stderr)
+        print("hint: start the database and set DATABASE_URL or PGHOST/PGUSER/PGDATABASE "
+              "(see README)", file=sys.stderr)
         return 2
 
     try:
@@ -288,7 +298,8 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     print(f"Read {len(records):,} records from {path.name}")
-    print(f"Inserted {inserted:,} new rows; {present:,} were already present; {unusable:,} unusable records skipped")
+    print(f"Inserted {inserted:,} new rows; {present:,} were already present; "
+          f"{unusable:,} unusable records skipped")
     print(f"applicants table now holds {total:,} rows")
     return 0
 

@@ -6,13 +6,15 @@ JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 query_data.py (handwritten SQL) and orm_queries.py (SQLAlchemy) must answer
 the same questions in the same way, and the console, the PDF and the Flask page
 must format results identically.  Everything they have to agree on lives here:
-the question wording, the matching rules, the valid score ranges and the
-number formatting.
+the question wording, the matching rules, the valid score ranges, the
+number formatting and the plain-text console layout.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
 
 # --------------------------------------------------------------------------- #
 #                               Matching rules                                #
@@ -72,23 +74,25 @@ TOP_UNIVERSITY_COUNT = 10
 
 QUESTIONS = {
     "1": "How many entries in the database are from applicants who applied for Fall 2026?",
-    "2": "Among entries that provide a nationality classification, what percentage are international students?",
-    "3": "What are the average GPA, GRE Quantitative, GRE Verbal, and GRE Analytical Writing scores "
-         "of applicants who provide each metric?",
+    "2": "Among entries that provide a nationality classification, what percentage are "
+         "international students?",
+    "3": "What are the average GPA, GRE Quantitative, GRE Verbal, and GRE Analytical Writing "
+         "scores of applicants who provide each metric?",
     "4": "What is the average GPA of American applicants who applied for Fall 2026?",
     "5": "What percentage of Fall 2025 entries are acceptances?",
     "6": "What is the average GPA of accepted applicants who applied for Fall 2026?",
     "7": "How many entries are from applicants who applied to Johns Hopkins University for a "
          "master's degree in Computer Science?",
-    "8": "How many Fall 2026 entries are acceptances from applicants applying for a PhD in Computer "
-         "Science at Georgetown University, MIT, Stanford University, or Carnegie Mellon University "
-         "(using the original downloaded fields)?",
+    "8": "How many Fall 2026 entries are acceptances from applicants applying for a PhD in "
+         "Computer Science at Georgetown University, MIT, Stanford University, or Carnegie Mellon "
+         "University (using the original downloaded fields)?",
     "9": "Repeating Question 8 with the LLM-generated program and university fields, how does the "
          "count compare with the original-field count?",
-    "10": "Original question: For Fall 2026, how do the acceptance rate and the average GPA of accepted "
-          "applicants compare across degree types that have at least 100 entries?",
-    "11": "Original question: Which ten universities (LLM-standardized names) have the most Fall 2026 "
-          "entries, and what percentage of each university's entries report an acceptance?",
+    "10": "Original question: For Fall 2026, how do the acceptance rate and the average GPA of "
+          "accepted applicants compare across degree types that have at least 100 entries?",
+    "11": "Original question: Which ten universities (LLM-standardized names) have the most "
+          "Fall 2026 entries, and what percentage of each university's entries report an "
+          "acceptance?",
 }
 
 # --------------------------------------------------------------------------- #
@@ -124,6 +128,11 @@ def format_average(value: object) -> str:
     return _two_places(value)
 
 
+def format_average_with_count(value: object, count: object) -> str:
+    """An average and how many values it is based on: '3.77 (n = 18,287)'."""
+    return f"{format_average(value)} (n = {format_count(count)})"
+
+
 def format_difference(value: object) -> str:
     """Signed whole number: 3 -> '+3', -2 -> '-2', 0 -> '0'."""
     number = int(value or 0)
@@ -132,10 +141,38 @@ def format_difference(value: object) -> str:
 
 def format_table(columns: list[str], rows: list[list[str]]) -> list[str]:
     """Plain-text table lines: first column left-aligned, the others right-aligned."""
-    widths = [max(len(str(value)) for value in [column] + [row[i] for row in rows]) for i, column in enumerate(columns)]
+    widths = [
+        max(len(str(value)) for value in [column] + [row[i] for row in rows])
+        for i, column in enumerate(columns)
+    ]
 
     def line(values: list[str]) -> str:
-        cells = [str(v).ljust(widths[0]) if i == 0 else str(v).rjust(widths[i]) for i, v in enumerate(values)]
+        cells = [
+            str(v).ljust(widths[0]) if i == 0 else str(v).rjust(widths[i])
+            for i, v in enumerate(values)
+        ]
         return "  ".join(cells)
 
     return [line(columns), "  ".join("-" * width for width in widths)] + [line(row) for row in rows]
+
+
+# --------------------------------------------------------------------------- #
+#                                   Console                                   #
+# --------------------------------------------------------------------------- #
+
+
+def print_answers(answers: Iterable[Any], title: str) -> None:
+    """Print answers as plain text under a title (the console output of both analyses).
+
+    Each answer is a query_data.Answer or an orm_queries.OrmAnswer: anything with
+    ``number``, ``question``, ``lines``, ``columns`` and ``table`` attributes.
+    """
+    print(title)
+    print("=" * len(title))
+    for answer in answers:
+        print(f"\nQuestion {answer.number}: {answer.question}")
+        for label, value in answer.lines:
+            print(f"  {label}: {value}")
+        if answer.table:
+            for text in format_table(answer.columns, answer.table):
+                print(f"  {text}")
