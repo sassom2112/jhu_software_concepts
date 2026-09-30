@@ -17,15 +17,30 @@ just swaps SCRAPE_FN and LOAD_FN for fakes and calls the route directly.
 PullState.is_running is the "busy" flag both buttons check.  It is a plain
 boolean guarded by a lock -- not a sleep(), not a poll loop -- so tests can
 set it directly to force the busy path (see tests/test_buttons.py).
+
+default_search_fn serves GET /api/applicants: the one path where user input
+reaches SQL (see applicant_search.py for the injection defences).
 """
 
 from __future__ import annotations
 
 import threading
 
+from psycopg import sql
+
+import applicant_search
 import clean
 import load_data
 import scrape
+from db_config import TABLE_NAME
+from query_limits import MAX_LIMIT
+
+# The stored ids that tell the scraper where new entries end.  The listing is
+# newest-first and the scraper stops at the first page holding a stored id, so
+# the newest MAX_LIMIT ids are all it needs -- never the whole table.
+KNOWN_IDS_STATEMENT = sql.SQL("SELECT {key} FROM {table} ORDER BY {key} DESC LIMIT {limit}").format(
+    key=sql.Identifier("p_id"), table=sql.Identifier(TABLE_NAME), limit=sql.Placeholder("limit")
+)
 
 
 class PullState:
@@ -62,7 +77,7 @@ def default_scrape_fn() -> list[dict]:
     up on the scrape module at call time, so a test can monkeypatch it.
     """
     with load_data.connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT p_id FROM applicants")
+        cur.execute(KNOWN_IDS_STATEMENT, {"limit": MAX_LIMIT})
         known_ids = {row[0] for row in cur}
 
     scraper = scrape.GradCafeScraper(cache_html=False)
@@ -77,11 +92,25 @@ def default_load_fn(raw_entries: list[dict]) -> int:
     optional, much slower step (see module_4/llm_hosting); new rows land with
     llm_generated_program/llm_generated_university left NULL until that step
     is run, the same way any other not-yet-standardized row would.
+
+    It never creates or alters tables: that is an administrator's job
+    (``python src/load_data.py`` as the table owner), so the web app can run
+    as a least-privilege database user with only SELECT and INSERT.
     """
     if not raw_entries:
         return 0
     cleaned = clean.clean_data(raw_entries)
     with load_data.connect() as conn:
-        load_data.create_table(conn)
         inserted, _present, _unusable = load_data.load_records(conn, cleaned)
     return inserted
+
+
+def default_search_fn(request: applicant_search.SearchRequest) -> list[dict]:
+    """Production search for GET /api/applicants, in a read-only transaction.
+
+    read_only=True makes PostgreSQL itself refuse any write in this session,
+    a second line of defence behind the parameterized query.
+    """
+    with load_data.connect() as conn:
+        conn.read_only = True
+        return applicant_search.search_applicants(conn, request)

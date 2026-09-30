@@ -7,6 +7,7 @@ Endpoints::
     GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
     POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
     POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
+    GET  /api/applicants   filtered, sorted, LIMITed rows as JSON (see applicant_search.py)
 """
 
 from __future__ import annotations
@@ -15,8 +16,10 @@ from datetime import datetime
 from http.client import HTTPException
 
 import psycopg
-from flask import Blueprint, current_app, jsonify, redirect, render_template, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
+
+from applicant_search import SearchError, parse_search_args
 
 bp = Blueprint("analysis", __name__)
 
@@ -81,3 +84,19 @@ def update_analysis():
     if current_app.pull_state.is_running:
         return jsonify(busy=True), 409
     return jsonify(ok=True), 200
+
+
+@bp.get("/api/applicants")
+def api_applicants():
+    """Search stored applicants: ?term=&status=&degree=&us_or_international=&program=
+    &sort=&order=&limit= .  Invalid parameters get 400; at most MAX_LIMIT rows come back."""
+    try:
+        search = parse_search_args(request.args)
+    except SearchError as err:
+        return jsonify(ok=False, error=str(err)), 400
+    try:
+        rows = current_app.config["SEARCH_FN"](search)
+    except EXPECTED_FAILURES as err:  # never echo database details to the caller
+        current_app.logger.error("search failed: %s", err.__class__.__name__)
+        return jsonify(ok=False, error="the search could not be completed"), 500
+    return jsonify(ok=True, limit=search.limit, count=len(rows), rows=rows), 200

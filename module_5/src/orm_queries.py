@@ -34,7 +34,9 @@ from analysis_common import (QUESTIONS, format_average, format_average_with_coun
                              format_difference, format_percent, print_answers)
 from db_config import describe_target
 from models import Applicant, SessionLocal
+from query_limits import MAX_LIMIT
 
+ONE_ROW = 1  # every aggregate below returns a single row; LIMIT says so explicitly
 REQUIRED_ORM_QUESTIONS = ("1", "4", "5", "8", "9", "10")
 
 
@@ -131,7 +133,8 @@ def _rounded_percent(part, whole):
 
 def q1_fall_2026_count(session: Session) -> int:
     """Question 1: the number of Fall 2026 entries."""
-    stmt = select(func.count()).select_from(Applicant).where(_is_term(rules.FALL_2026))
+    stmt = (select(func.count()).select_from(Applicant).where(_is_term(rules.FALL_2026))
+            .limit(ONE_ROW))
     return session.scalar(stmt) or 0
 
 
@@ -146,6 +149,7 @@ def q2_percent_international(session: Session) -> tuple[int, int, Decimal | None
     stmt = (
         select(international, classified, _rounded_percent(international, classified))
         .where(nationality.in_(rules.NATIONALITY_CLASSES))
+        .limit(ONE_ROW)
     )
     return tuple(session.execute(stmt).one())
 
@@ -162,7 +166,7 @@ def q3_average_scores(session: Session) -> dict[str, tuple[Decimal | None, int]]
         _rounded_average(Applicant.gre, quant), func.count(Applicant.gre).filter(quant),
         _rounded_average(Applicant.gre_v, verbal), func.count(Applicant.gre_v).filter(verbal),
         _rounded_average(Applicant.gre_aw, writing), func.count(Applicant.gre_aw).filter(writing),
-    )
+    ).limit(ONE_ROW)
     r = session.execute(stmt).one()
     return {"gpa": (r[0], r[1]), "gre": (r[2], r[3]), "gre_v": (r[4], r[5]), "gre_aw": (r[6], r[7])}
 
@@ -175,7 +179,7 @@ def q4_american_fall_2026_gpa(session: Session) -> tuple[Decimal | None, int]:
             _normalized(Applicant.us_or_international) == rules.AMERICAN,
             _valid_gpa(),
         )
-    )
+    ).limit(ONE_ROW)
     return tuple(session.execute(stmt).one())
 
 
@@ -186,6 +190,7 @@ def q5_fall_2025_acceptance(session: Session) -> tuple[int, int, Decimal | None]
     stmt = (
         select(accepted, total, _rounded_percent(accepted, total))
         .where(_is_term(rules.FALL_2025))
+        .limit(ONE_ROW)
     )
     return tuple(session.execute(stmt).one())
 
@@ -194,7 +199,7 @@ def q6_accepted_fall_2026_gpa(session: Session) -> tuple[Decimal | None, int]:
     """Question 6: (average GPA, number of GPAs) of accepted Fall 2026 applicants."""
     stmt = select(_rounded_average(Applicant.gpa), func.count(Applicant.gpa)).where(
         and_(_is_term(rules.FALL_2026), _is_accepted(), _valid_gpa())
-    )
+    ).limit(ONE_ROW)
     return tuple(session.execute(stmt).one())
 
 
@@ -206,7 +211,7 @@ def q7_jhu_cs_masters(session: Session) -> int:
             _mentions_computer_science(Applicant.program),
             _is_masters(),
         )
-    )
+    ).limit(ONE_ROW)
     return session.scalar(stmt) or 0
 
 
@@ -222,7 +227,7 @@ def q8_accepted_cs_phd_original(session: Session) -> int:
             _mentions_computer_science(Applicant.program),
             _original_target_university(),
         )
-    )
+    ).limit(ONE_ROW)
     return session.scalar(stmt) or 0
 
 
@@ -234,7 +239,7 @@ def q9_accepted_cs_phd_llm(session: Session) -> tuple[int, int]:
     llm = func.count().filter(
         and_(_mentions_computer_science(Applicant.llm_generated_program), _llm_target_university())
     )
-    stmt = select(original, llm).where(_q8_base_conditions())
+    stmt = select(original, llm).where(_q8_base_conditions()).limit(ONE_ROW)
     return tuple(session.execute(stmt).one())
 
 
@@ -258,6 +263,7 @@ def q10_degree_comparison(session: Session) -> list[tuple]:
         .group_by(Applicant.degree)
         .having(func.count() >= rules.MIN_ENTRIES_PER_DEGREE)
         .order_by(func.count().desc(), Applicant.degree)
+        .limit(MAX_LIMIT)
     )
     return [tuple(row) for row in session.execute(stmt).all()]
 
@@ -290,7 +296,8 @@ def q11_top_universities(session: Session) -> list[tuple]:
 
 def database_summary(session: Session) -> dict:
     """Row count and newest entry date, shown at the top of the web page."""
-    total, newest = session.execute(select(func.count(), func.max(Applicant.date_added))).one()
+    stmt = select(func.count(), func.max(Applicant.date_added)).limit(ONE_ROW)
+    total, newest = session.execute(stmt).one()
     return {"total_entries": total, "newest_entry": newest}
 
 

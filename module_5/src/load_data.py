@@ -8,7 +8,7 @@ cleaned records plus the LLM-standardized program and university) and loads it
 into a single table, `applicants`, using psycopg 3.
 
 Design:
-  * The table is created if it does not exist (see CREATE_TABLE_SQL).
+  * The table is created if it does not exist (see CREATE_TABLE_STATEMENT).
   * p_id is Grad Cafe's own result id (the number in the entry's URL), so it is
     a natural, stable primary key: the same entry always gets the same p_id.
   * Rows are bulk-copied into a temporary staging table and then inserted with
@@ -47,6 +47,7 @@ from psycopg.rows import dict_row
 from db_config import (CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME,
                        describe_target, get_database_url)
 from jsonio import load_data as load_json  # Module 2 JSON reader (plain or .gz)
+from query_limits import MAX_LIMIT, clamp_limit
 
 # The module folder (module_4/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
@@ -72,25 +73,59 @@ COLUMNS = (
     "llm_generated_university",
 )
 
-CREATE_TABLE_SQL = f"""
-CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-    p_id                     INTEGER PRIMARY KEY,
-    program                  TEXT,
-    comments                 TEXT,
-    date_added               DATE,
-    url                      TEXT,
-    status                   TEXT,
-    term                     TEXT,
-    us_or_international      TEXT,
-    gpa                      FLOAT,
-    gre                      FLOAT,
-    gre_v                    FLOAT,
-    gre_aw                   FLOAT,
-    degree                   TEXT,
-    llm_generated_program    TEXT,
-    llm_generated_university TEXT
+# Column definitions of the Module 3 schema, in COLUMNS order.  The types are
+# fixed SQL keywords written here in the code, never taken from any input.
+COLUMN_TYPES = (
+    ("p_id", "INTEGER PRIMARY KEY"),
+    ("program", "TEXT"),
+    ("comments", "TEXT"),
+    ("date_added", "DATE"),
+    ("url", "TEXT"),
+    ("status", "TEXT"),
+    ("term", "TEXT"),
+    ("us_or_international", "TEXT"),
+    ("gpa", "FLOAT"),
+    ("gre", "FLOAT"),
+    ("gre_v", "FLOAT"),
+    ("gre_aw", "FLOAT"),
+    ("degree", "TEXT"),
+    ("llm_generated_program", "TEXT"),
+    ("llm_generated_university", "TEXT"),
 )
-"""
+STAGING_TABLE = "applicants_staging"
+
+# Built with psycopg's sql module: names are quoted with sql.Identifier, and no
+# f-string, + or .format() ever puts text into a statement.
+CREATE_TABLE_STATEMENT = sql.SQL("CREATE TABLE IF NOT EXISTS {table} ({columns})").format(
+    table=sql.Identifier(TABLE_NAME),
+    columns=sql.SQL(", ").join(
+        sql.SQL("{} {}").format(sql.Identifier(name), sql.SQL(sql_type))
+        for name, sql_type in COLUMN_TYPES
+    ),
+)
+_COLUMN_LIST = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
+_NAMES = {
+    "table": sql.Identifier(TABLE_NAME),
+    "staging": sql.Identifier(STAGING_TABLE),
+    "cols": _COLUMN_LIST,
+    "key": sql.Identifier("p_id"),
+}
+STAGING_CREATE_STATEMENT = sql.SQL(
+    "CREATE TEMP TABLE {staging} (LIKE {table} INCLUDING DEFAULTS) ON COMMIT DROP"
+).format(**_NAMES)
+STAGING_COPY_STATEMENT = sql.SQL("COPY {staging} ({cols}) FROM STDIN").format(**_NAMES)
+# LIMIT is the exact size of this batch: it bounds the statement without ever dropping a row.
+INSERT_NEW_ROWS_STATEMENT = sql.SQL(
+    "INSERT INTO {table} ({cols}) SELECT {cols} FROM {staging} LIMIT {batch} "
+    "ON CONFLICT ({key}) DO NOTHING"
+).format(batch=sql.Placeholder("batch"), **_NAMES)
+STAGING_DROP_STATEMENT = sql.SQL("DROP TABLE {staging}").format(**_NAMES)
+COUNT_ROWS_STATEMENT = sql.SQL("SELECT COUNT(*) FROM {table} LIMIT {limit}").format(
+    limit=sql.Placeholder("limit"), **_NAMES
+)
+FETCH_APPLICANTS_STATEMENT = sql.SQL(
+    "SELECT {cols} FROM {table} ORDER BY {key} DESC LIMIT {limit}"
+).format(limit=sql.Placeholder("limit"), **_NAMES)
 
 
 # --------------------------------------------------------------------------- #
@@ -186,7 +221,7 @@ def create_table(conn: psycopg.Connection, reset: bool = False) -> None:
     with conn.cursor() as cur:
         if reset:
             cur.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(TABLE_NAME)))
-        cur.execute(CREATE_TABLE_SQL)
+        cur.execute(CREATE_TABLE_STATEMENT)
 
 
 def load_records(conn: psycopg.Connection, records: Iterable[dict]) -> tuple[int, int, int]:
@@ -204,42 +239,29 @@ def load_records(conn: psycopg.Connection, records: Iterable[dict]) -> tuple[int
             continue
         rows.setdefault(row[0], row)  # first occurrence wins inside one file
 
-    column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
     with conn.cursor() as cur:
-        cur.execute(
-            sql.SQL("CREATE TEMP TABLE applicants_staging (LIKE {} INCLUDING DEFAULTS) "
-                    "ON COMMIT DROP")
-            .format(sql.Identifier(TABLE_NAME))
-        )
-        copy_sql = sql.SQL("COPY applicants_staging ({}) FROM STDIN").format(column_list)
-        with cur.copy(copy_sql) as copy:
+        cur.execute(STAGING_CREATE_STATEMENT)
+        with cur.copy(STAGING_COPY_STATEMENT) as copy:
             for row in rows.values():
                 copy.write_row(row)
-        cur.execute(
-            sql.SQL("INSERT INTO {} ({cols}) SELECT {cols} FROM applicants_staging "
-                    "ON CONFLICT (p_id) DO NOTHING")
-            .format(sql.Identifier(TABLE_NAME), cols=column_list)
-        )
+        cur.execute(INSERT_NEW_ROWS_STATEMENT, {"batch": len(rows)})
         inserted = cur.rowcount
-        cur.execute("DROP TABLE applicants_staging")
+        cur.execute(STAGING_DROP_STATEMENT)
     return inserted, len(rows) - inserted, unusable
 
 
 def count_rows(conn: psycopg.Connection) -> int:
     """Number of rows currently stored in the applicants table."""
     with conn.cursor() as cur:
-        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(TABLE_NAME)))
+        cur.execute(COUNT_ROWS_STATEMENT, {"limit": 1})
         return cur.fetchone()[0]
 
 
-def fetch_applicants(conn: psycopg.Connection) -> list[dict]:
-    """Every stored row as a dict keyed by the Module 3 column names, newest p_id first."""
-    column_list = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
-    query = sql.SQL("SELECT {} FROM {} ORDER BY p_id DESC").format(
-        column_list, sql.Identifier(TABLE_NAME)
-    )
+def fetch_applicants(conn: psycopg.Connection, limit: object = MAX_LIMIT) -> list[dict]:
+    """The newest stored rows (at most *limit*, clamped to 1..MAX_LIMIT) as dicts keyed by
+    the Module 3 column names, newest p_id first."""
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(query)
+        cur.execute(FETCH_APPLICANTS_STATEMENT, {"limit": clamp_limit(limit, default=MAX_LIMIT)})
         return cur.fetchall()
 
 

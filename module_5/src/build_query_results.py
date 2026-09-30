@@ -21,10 +21,24 @@ from datetime import datetime
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 
 import analysis_common as rules
 import query_data
-from db_config import run_with_connection
+from db_config import TABLE_NAME, run_with_connection
+
+# The counts behind the report's "valid-range rule" note: one row, composed
+# with psycopg's sql module (table name quoted as an Identifier, LIMIT bound).
+DATA_NOTES_STATEMENT = sql.SQL("""
+    SELECT COUNT(*),
+           COUNT(gre) FILTER (WHERE gre NOT BETWEEN 130 AND 170),
+           COUNT(gre) FILTER (WHERE gre BETWEEN 260 AND 340),
+           COUNT(gre_aw) FILTER (WHERE gre_aw NOT BETWEEN 0 AND 6),
+           COUNT(gpa) FILTER (WHERE NOT (gpa > 0 AND gpa <= 4.0)),
+           ROUND(AVG(gre)::numeric, 2), MAX(date_added), MIN(date_added)
+    FROM {table}
+    LIMIT {limit}
+""").format(table=sql.Identifier(TABLE_NAME), limit=sql.Placeholder("limit"))
 
 # The module folder (module_4/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
@@ -90,15 +104,7 @@ def _answer_html(answer: query_data.Answer) -> str:
 def _data_notes(conn: psycopg.Connection) -> str:
     """Live counts that justify the valid-range rule used for the averages."""
     with conn.cursor() as cur:
-        cur.execute("""
-            SELECT COUNT(*),
-                   COUNT(gre) FILTER (WHERE gre NOT BETWEEN 130 AND 170),
-                   COUNT(gre) FILTER (WHERE gre BETWEEN 260 AND 340),
-                   COUNT(gre_aw) FILTER (WHERE gre_aw NOT BETWEEN 0 AND 6),
-                   COUNT(gpa) FILTER (WHERE NOT (gpa > 0 AND gpa <= 4.0)),
-                   ROUND(AVG(gre)::numeric, 2), MAX(date_added), MIN(date_added)
-            FROM applicants
-        """)
+        cur.execute(DATA_NOTES_STATEMENT, {"limit": 1})
         total, bad_q, totals_q, bad_aw, bad_gpa, naive_q, newest, oldest = cur.fetchone()
     # An empty table has no oldest/newest date and no average: say so instead of crashing.
     if oldest and newest:

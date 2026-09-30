@@ -22,6 +22,7 @@ from typing import Callable
 from flask import Flask
 
 import orm_queries
+from applicant_search import SearchRequest
 
 from . import services
 from .routes import bp
@@ -29,6 +30,7 @@ from .routes import bp
 ScrapeFn = Callable[[], list[dict]]
 LoadFn = Callable[[list[dict]], int]
 QueryFn = Callable[[], dict]
+SearchFn = Callable[[SearchRequest], list[dict]]
 
 
 def create_app(
@@ -36,6 +38,7 @@ def create_app(
     scrape_fn: ScrapeFn | None = None,
     load_fn: LoadFn | None = None,
     query_fn: QueryFn | None = None,
+    search_fn: SearchFn | None = None,
 ) -> Flask:
     """Build and configure the Flask application.
 
@@ -47,6 +50,9 @@ def create_app(
         query_fn: no-argument callable returning the dict the analysis page
             renders.  Defaults to orm_queries.get_analysis (reads PostgreSQL
             through the SQLAlchemy model).
+        search_fn: callable(SearchRequest) -> rows for GET /api/applicants.
+            Defaults to services.default_search_fn (a read-only, parameterized
+            query; see applicant_search.py).
     """
     app = Flask(__name__)
     # Flash messages need a secret key.  Use FLASK_SECRET_KEY when set; otherwise
@@ -55,6 +61,7 @@ def create_app(
     app.config["SCRAPE_FN"] = scrape_fn or services.default_scrape_fn
     app.config["LOAD_FN"] = load_fn or services.default_load_fn
     app.config["QUERY_FN"] = query_fn or _default_query_fn
+    app.config["SEARCH_FN"] = search_fn or services.default_search_fn
 
     # One PullState per application instance (not module-global), so each
     # create_app() call in a test starts idle regardless of other tests.
