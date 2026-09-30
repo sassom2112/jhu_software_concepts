@@ -99,6 +99,36 @@ def client(app):
 
 
 # --------------------------------------------------------------------------- #
+#        Environment: a developer's own database settings never leak in       #
+# --------------------------------------------------------------------------- #
+
+# The web app's DB_* settings and db_roles.py's APP_DB_* settings (see
+# .env.example).  Anyone who has sourced their .env has them set, and they
+# could change who the tests log in as.  The tests connect through
+# DATABASE_URL only, so these are removed before anything else runs.
+DEVELOPER_SETTINGS = ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD",
+                      "APP_DB_USER", "APP_DB_PASSWORD")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ignore_developer_db_settings():
+    """Remove DEVELOPER_SETTINGS from the environment while the tests run.
+
+    autouse=True: every test gets this without asking for it by name.
+    scope="session": it runs once, before every other fixture -- including the
+    session-wide database_url guard below, so the guard checks exactly the
+    settings the tests then connect with.  pytest.MonkeyPatch.context() is the
+    session-wide version of the monkeypatch fixture: it puts everything back
+    when the session ends.  A test may still set any of these itself with
+    monkeypatch.setenv(...).
+    """
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        for name in DEVELOPER_SETTINGS:
+            monkeypatch.delenv(name, raising=False)
+        yield
+
+
+# --------------------------------------------------------------------------- #
 #             Database fixtures: a real (throwaway) test database             #
 # --------------------------------------------------------------------------- #
 

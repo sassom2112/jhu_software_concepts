@@ -8,19 +8,28 @@ environment variables, in this order of preference:
 
   1. DATABASE_URL: a URL such as  postgresql://gradcafe@localhost:5432/gradcafe
      (a libpq "key=value" string such as  host=localhost dbname=gradcafe  and the
-     SQLAlchemy spelling postgresql+psycopg://... also work).
-  2. The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE
-     (defaults: localhost, 5432, gradcafe, gradcafe).  PGHOST may also be a
-     Unix-socket directory such as /var/run/postgresql.
+     SQLAlchemy spelling postgresql+psycopg://... also work).  When it is set it
+     is used as it is, and nothing below is consulted.
+  2. The project's own DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD: how
+     a deployment names its connection, e.g. the web app logging in as the
+     least-privilege role that db_roles.py creates (see .env.example).
+  3. The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE.
+  4. The defaults: localhost, 5432, user gradcafe, database gradcafe.
 
-The password is best supplied by libpq itself, from ~/.pgpass (chmod 600) or
-the PGPASSWORD variable, so it never has to appear in a URL, a file in the
-repository, or a shell history.  Both psycopg (load_data.py, query_data.py)
-and SQLAlchemy's psycopg driver (models.py) go through libpq, so the same
-settings serve every part of the project.
+Host, port, user and database name are looked up one at a time, so DB_HOST can
+be combined with PGUSER, and whatever is still missing falls back to its
+default.  A host may also be a Unix-socket directory such as /var/run/postgresql.
+
+DB_PASSWORD, when it is set, is handed to libpq inside the connection string;
+it is never printed, and describe_target() leaves it out.  Without it, libpq
+finds the password on its own, in ~/.pgpass (chmod 600) or PGPASSWORD, so it
+never has to appear in a URL, a file in the repository, or a shell history.
+Both psycopg (load_data.py, query_data.py) and SQLAlchemy's psycopg driver
+(models.py) go through libpq, so the same settings serve every part of the
+project.
 
 The command-line tools that talk to PostgreSQL through psycopg
-(query_data.py, build_query_results.py) open their connection with
+(query_data.py, build_query_results.py, db_roles.py) open their connection with
 run_with_connection(), so they report an unusable setting, an unreachable
 server and a failed query with the same messages and exit codes.
 """
@@ -46,8 +55,9 @@ CONNECT_TIMEOUT_SECONDS = 10
 TABLE_NAME = "applicants"
 
 INVALID_SETTINGS_MESSAGE = (
-    "error: the database connection settings are not valid; check DATABASE_URL or "
-    "PGHOST/PGPORT/PGUSER/PGDATABASE (see README)"
+    "error: the database connection settings are not valid; check DATABASE_URL, "
+    "DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD or PGHOST/PGPORT/PGUSER/PGDATABASE "
+    "(see README)"
 )
 
 # "postgresql+psycopg://" (SQLAlchemy style) is reduced to the scheme libpq understands.
@@ -56,25 +66,39 @@ _DRIVER_SUFFIX = re.compile(r"^(postgres(?:ql)?)\+\w+://", re.IGNORECASE)
 T = TypeVar("T")
 
 
-def _pg_settings() -> dict[str, str]:
-    return {
-        "host": os.environ.get("PGHOST", DEFAULT_HOST),
-        "port": os.environ.get("PGPORT", DEFAULT_PORT),
-        "user": os.environ.get("PGUSER", DEFAULT_USER),
-        "dbname": os.environ.get("PGDATABASE", DEFAULT_DATABASE),
+# Each connection field: (libpq keyword, the project's variable, libpq's own variable, default).
+_FIELDS = (
+    ("host", "DB_HOST", "PGHOST", DEFAULT_HOST),
+    ("port", "DB_PORT", "PGPORT", DEFAULT_PORT),
+    ("user", "DB_USER", "PGUSER", DEFAULT_USER),
+    ("dbname", "DB_NAME", "PGDATABASE", DEFAULT_DATABASE),
+)
+
+
+def _settings() -> dict[str, str]:
+    """Host, port, user and dbname (DB_* first, then PG*, then the default), plus
+    DB_PASSWORD when it is set.  A blank DB_* value counts as not set."""
+    settings = {
+        keyword: os.environ.get(project_name, "").strip() or os.environ.get(libpq_name, default)
+        for keyword, project_name, libpq_name, default in _FIELDS
     }
+    password = os.environ.get("DB_PASSWORD", "")
+    if password:
+        settings["password"] = password
+    return settings
 
 
 def get_database_url() -> str:
     """Connection string for psycopg.
 
     DATABASE_URL (a URL or a key=value string) when it is set, else a key=value
-    DSN built from the PG* variables.
+    DSN built from the DB_* and PG* variables.  The result can hold DB_PASSWORD,
+    so it is handed to libpq and never printed.
     """
     url = os.environ.get("DATABASE_URL", "").strip()
     if url:
         return _DRIVER_SUFFIX.sub(r"\1://", url, count=1)
-    return make_conninfo(**_pg_settings())
+    return make_conninfo(**_settings())
 
 
 def get_sqlalchemy_url() -> URL:
@@ -82,7 +106,8 @@ def get_sqlalchemy_url() -> URL:
 
     The settings are parsed by psycopg's own libpq-compatible parser and rebuilt
     field by field, so URLs, key=value strings, Unix-socket directories and IPv6
-    hosts all work, and extra options such as sslmode are kept.  A non-numeric
+    hosts all work, extra options such as sslmode are kept, and a DB_PASSWORD
+    travels along (SQLAlchemy masks it as *** whenever the URL is printed).  A non-numeric
     port is passed through unchanged so libpq rejects it when connecting, with
     the same connection error the psycopg scripts report.  Raises
     psycopg.ProgrammingError if the settings cannot be parsed at all.

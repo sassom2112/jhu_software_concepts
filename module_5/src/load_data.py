@@ -306,8 +306,8 @@ def main(argv: list[str] | None = None) -> int:
     except psycopg.OperationalError as err:
         print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}".strip(),
               file=sys.stderr)
-        print("hint: start the database and set DATABASE_URL or PGHOST/PGUSER/PGDATABASE "
-              "(see README)", file=sys.stderr)
+        print("hint: start the database and set DATABASE_URL, DB_HOST/DB_USER/DB_NAME or "
+              "PGHOST/PGUSER/PGDATABASE (see README)", file=sys.stderr)
         return 2
 
     try:
