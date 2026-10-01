@@ -585,7 +585,7 @@ def standardize() -> Any:
 
 
 def _confine_path(path: str) -> str:
-    """Student edit: command-line paths must resolve inside module_2 or the current folder."""
+    """Student edit: command-line paths must resolve inside the module folder or the current folder."""
     resolved = os.path.realpath(path)
     for root in (os.path.dirname(os.path.dirname(os.path.realpath(__file__))), os.getcwd()):
         real_root = os.path.realpath(root)
@@ -664,7 +664,8 @@ if __name__ == "__main__":
 
     if args.serve or args.file is None:
         port = int(os.getenv("PORT", "8000"))
-        app.run(host="0.0.0.0", port=port, debug=False)
+        # student edit: listen on this machine only, unless FLASK_HOST says otherwise
+        app.run(host=os.getenv("FLASK_HOST", "127.0.0.1"), port=port, debug=False)
     else:
         _cli_process_file(
             in_path=args.file,

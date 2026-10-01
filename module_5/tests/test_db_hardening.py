@@ -72,14 +72,15 @@ def test_db_variables_describe_the_connection(monkeypatch):
     monkeypatch.setenv("DB_PORT", "6543")
     monkeypatch.setenv("DB_NAME", "grades")
     monkeypatch.setenv("DB_USER", "gradcafe_app")
-    monkeypatch.setenv("DB_PASSWORD", "not-a-real-password")
+    password = secrets.token_urlsafe(16)               # a fresh throwaway value, never a real one
+    monkeypatch.setenv("DB_PASSWORD", password)
 
     assert conninfo_to_dict(get_database_url()) == {
         "host": "db.internal", "port": "6543", "dbname": "grades",
-        "user": "gradcafe_app", "password": "not-a-real-password",  # the password reaches libpq
+        "user": "gradcafe_app", "password": password,  # the password reaches libpq
     }
-    assert get_sqlalchemy_url().password == "not-a-real-password"   # and SQLAlchemy,
-    assert "not-a-real-password" not in str(get_sqlalchemy_url())   # which prints it as ***
+    assert get_sqlalchemy_url().password == password    # and SQLAlchemy,
+    assert password not in str(get_sqlalchemy_url())    # which prints it as ***
     assert describe_target() == "gradcafe_app@db.internal:6543/grades"  # messages never show it
 
 
@@ -229,6 +230,16 @@ def test_role_statements_grant_select_and_insert_only():
     again = build_role_statements("gradcafe_app", "x", "gradcafe", exists=True)
     assert again[0].as_string().startswith('ALTER ROLE "gradcafe_app" WITH LOGIN NOSUPERUSER')
 
+def test_a_hostile_database_name_stays_one_quoted_identifier():
+    # Snyk Code reports the database name (read back from the server) reaching execute() as
+    # SQL injection.  sql.Identifier double-quotes it and doubles any quote inside, so even
+    # this name stays a single identifier and the DROP is never run as SQL.
+    statements = build_role_statements("gradcafe_app", "pw", 'x"; DROP TABLE applicants; --',
+                                       exists=False)
+
+    assert statements[3].as_string() == (
+        'GRANT CONNECT ON DATABASE "x""; DROP TABLE applicants; --" TO "gradcafe_app"'
+    )
 
 @pytest.mark.parametrize(
     ("role", "password"),

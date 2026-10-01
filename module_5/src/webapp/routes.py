@@ -71,8 +71,9 @@ def pull_data():
     try:
         raw_entries = current_app.config["SCRAPE_FN"]()
         inserted = current_app.config["LOAD_FN"](raw_entries)
-    except EXPECTED_FAILURES as err:  # report the failure as JSON instead of an HTML 500 page
-        return jsonify(ok=False, error=str(err)), 500
+    except EXPECTED_FAILURES as err:  # never echo database or network details to the caller
+        current_app.logger.error("pull failed: %s", err.__class__.__name__)
+        return jsonify(ok=False, error="the pull could not be completed"), 500
     finally:
         current_app.pull_state.finish()
     return jsonify(ok=True, inserted=inserted), 200

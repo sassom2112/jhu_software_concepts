@@ -58,7 +58,8 @@ def test_pull_data_returns_500_and_clears_busy_state_when_the_loader_fails(fake_
     assert response.status_code == 500
     body = response.get_json()
     assert body["ok"] is False
-    assert "insert failed" in body["error"]
+    assert body["error"] == "the pull could not be completed"
+    assert "insert failed" not in response.get_data(as_text=True)  # no internal detail leaks out
     # the route's finally: block must always run, so a failed pull never leaves the app stuck "busy"
     assert app.pull_state.is_running is False
 
