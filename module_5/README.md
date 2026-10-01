@@ -51,16 +51,66 @@ module_4/
 └── query_results.pdf, limitations.pdf, screenshots/, screenshot.jpg   # Module 3 deliverables
 ```
 
-## 2. Setup
+## 2. Fresh Install
 
-Python 3.11 (the application and tests also run on 3.10; building the docs needs 3.11) and PostgreSQL 13+ (developed on PostgreSQL 17 in Docker).
+You need Python 3.11 (`.python-version` pins 3.11.13; pyenv and uv both read it) and PostgreSQL 13+
+(developed on PostgreSQL 17 in Docker). The dependency graph also needs Graphviz: `sudo apt install graphviz`.
+
+Both methods below build the same environment. `requirements.txt` pins every package to an exact version:
+the application, the tests, Pylint and pydeps, and every package those pull in. `setup.py` then installs
+this project itself in editable mode, so `db_config`, `load_data`, `webapp` and the other modules import
+the same way from any folder.
+
+Keep the `-e`: only editable installs are supported. The command-line tools read and write their data
+files in `module_5/`, next to `src/`. A plain `pip install .` copies the modules into the virtual
+environment, and `gradcafe-load` then fails with `error: cannot read input`.
+
+### Option A: pip + venv
 
 ```bash
-cd module_4
+git clone git@github.com:sassom2112/jhu_software_concepts.git
+# no GitHub SSH key? the repository is public: git clone https://github.com/sassom2112/jhu_software_concepts.git
+cd jhu_software_concepts/module_5
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -e .
+pip check                       # No broken requirements found.
 ```
+
+### Option B: uv
+
+```bash
+git clone git@github.com:sassom2112/jhu_software_concepts.git
+# no GitHub SSH key? the repository is public: git clone https://github.com/sassom2112/jhu_software_concepts.git
+cd jhu_software_concepts/module_5
+uv venv .venv                   # reads .python-version (3.11.13); downloads it if missing
+source .venv/bin/activate
+uv pip sync requirements.txt
+uv pip install -e .
+uv pip check                    # a uv venv has no pip of its own
+```
+
+`uv pip sync` makes the environment match `requirements.txt` exactly: it installs what is missing and
+removes anything that is not listed. That is why the project is installed after it. If you sync again
+later, run `uv pip install -e .` again too.
+
+### Check the install
+
+Either way, with the virtual environment active and from `module_5`:
+
+```bash
+python -c "import db_config, webapp; print('imports ok')"
+gradcafe-load --help            # the commands from setup.py are on PATH
+pylint src                      # 10.00/10
+pydeps src/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o /tmp/dependency.svg
+```
+
+The last line writes a scratch copy, so checking never changes the committed `dependency.svg`. That
+file is made by the same command with `-o dependency.svg`. It records the Graphviz version and layout,
+so a different Graphviz produces a different file: regenerate it only when the imports change.
+
+### PostgreSQL
 
 PostgreSQL (Docker, bound to localhost), plus the throwaway database the tests use:
 
