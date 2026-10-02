@@ -1,26 +1,34 @@
-........................................................................ [ 27%]
-........................................................................ [ 55%]
-........................................................................ [ 82%]
-.............................................                            [100%]
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 65%]
+........................................................................ [ 87%]
+...........................................                              [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.11.13-final-0 _______________
 
 Name                                  Stmts   Miss  Cover   Missing
 -------------------------------------------------------------------
-module_4/src/analysis_common.py          47      0   100%
-module_4/src/build_query_results.py      58      0   100%
-module_4/src/clean.py                   189      0   100%
-module_4/src/db_config.py                41      0   100%
-module_4/src/load_data.py               129      0   100%
-module_4/src/models.py                   32      0   100%
-module_4/src/orm_queries.py             172      0   100%
-module_4/src/query_data.py              104      0   100%
-module_4/src/run.py                       5      0   100%
-module_4/src/scrape.py                  612      0   100%
-module_4/src/webapp/__init__.py          22      0   100%
-module_4/src/webapp/routes.py            31      0   100%
-module_4/src/webapp/services.py          37      0   100%
+module_5/src/analysis_common.py          61      0   100%
+module_5/src/applicant_search.py         68      0   100%
+module_5/src/build_query_results.py      56      0   100%
+module_5/src/clean.py                   188      0   100%
+module_5/src/db_config.py                65      0   100%
+module_5/src/db_roles.py                 76      0   100%
+module_5/src/jsonio.py                   26      0   100%
+module_5/src/load_data.py               135      0   100%
+module_5/src/models.py                   32      0   100%
+module_5/src/orm_queries.py             168      0   100%
+module_5/src/query_data.py               94      0   100%
+module_5/src/query_limits.py             18      0   100%
+module_5/src/robots_rules.py             71      0   100%
+module_5/src/run.py                       5      0   100%
+module_5/src/scrape.py                  493      0   100%
+module_5/src/scrape_state.py             37      0   100%
+module_5/src/site_urls.py                56      0   100%
+module_5/src/webapp/__init__.py          25      0   100%
+module_5/src/webapp/routes.py            49      0   100%
+module_5/src/webapp/services.py          44      0   100%
 -------------------------------------------------------------------
-TOTAL                                  1479      0   100%
+TOTAL                                  1767      0   100%
 Required test coverage of 100% reached. Total coverage: 100.00%
-261 passed in 2.10s
+331 passed in 3.00s
