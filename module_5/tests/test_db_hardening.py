@@ -199,9 +199,9 @@ def throwaway_role(db_conn):
 def app_role(db_conn, throwaway_role, database_url) -> AppRole:
     """The throwaway role, provisioned exactly the way db_roles.py provisions gradcafe_app.
 
-    On the Docker database this login really checks the random password
-    (scram-sha-256 over TCP); the CI database trusts every local login, so
-    there only the privileges are tested, not the password.
+    The login really checks the random password: the Docker database and the
+    CI service container both use scram-sha-256 over TCP.  (In CI, PGPASSWORD
+    gives libpq the owner's password; the password in this URL overrides it.)
     """
     password = secrets.token_urlsafe(24)
     provision_app_role(db_conn, throwaway_role, password)

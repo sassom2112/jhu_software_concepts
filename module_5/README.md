@@ -7,7 +7,7 @@
 | | |
 | --- | --- |
 | Documentation (Read the Docs) | https://sassom2112-jhu-software-concept.readthedocs.io/en/latest/ |
-| Continuous integration | [`.github/workflows/tests.yml`](../.github/workflows/tests.yml) · proof: [`actions_success.png`](actions_success.png) |
+| Continuous integration | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) · proof: [`actions_success.png`](actions_success.png) |
 | Coverage proof | [`coverage_summary.txt`](coverage_summary.txt): 100% of `module_4/src` |
 | Repository (SSH) | `git@github.com:sassom2112/jhu_software_concepts.git` (also in `github.txt`) |
 
@@ -15,7 +15,8 @@ Module 4 puts the Module 3 Grad Café application under test and documents it:
 
 * a **pytest suite** of 260 tests with **100% line coverage** of `module_4/src`. Every test is marked,
   none touches the internet, none sleeps, and the database tests use a separate `*_test` database;
-* a **GitHub Actions** workflow that starts PostgreSQL and runs the suite on every push that changes `module_4/`;
+* a **GitHub Actions** workflow (`ci.yml`) with four jobs (Pylint 10/10, the pydeps dependency graph, Snyk,
+  and pytest with 100% coverage) on every push that changes `module_5/`;
 * **Sphinx documentation** (setup, architecture, API reference, testing guide, operational
   notes, troubleshooting), published on Read the Docs.
 
@@ -29,8 +30,8 @@ module_4/
 ├── requirements.txt          # exact versions: application + pytest + pytest-cov
 ├── pytest.ini                # markers + --cov=module_4/src --cov-fail-under=100
 ├── coverage_summary.txt      # the terminal coverage report of the full run
-├── actions_success.png       # screenshot of a green GitHub Actions run
-├── .github/workflows/tests.yml   # copy of the workflow GitHub runs (see section 5)
+├── actions_success.png       # screenshot of a green ci.yml run
+├── .github/workflows/ci.yml  # copy of the workflow GitHub runs (see section 5)
 ├── github.txt, .env.example  # SSH URL; names of the environment variables (no secrets)
 │
 ├── src/                      # the application (Module 3 code, moved here)
@@ -199,18 +200,22 @@ fixture and test double.
 ## 5. GitHub Actions
 
 GitHub only runs workflows stored at the repository root, so the workflow that runs is
-[`/.github/workflows/tests.yml`](../.github/workflows/tests.yml). `module_4/.github/workflows/tests.yml`
-is an identical copy kept with the assignment, and CI fails if the two ever differ. On every push that
-changes `module_4/` (or the workflow, or `.readthedocs.yaml`) the workflow:
+[`/.github/workflows/ci.yml`](../.github/workflows/ci.yml). `module_5/.github/workflows/ci.yml` is an
+identical copy kept with the assignment, and the pytest job fails if the two ever differ. On every push or
+pull request that changes `module_5/` (or the workflow), four jobs run side by side, each on a fresh
+Ubuntu 24.04 machine with Python 3.11 and `requirements.txt` installed:
 
-1. starts a `postgres:17` service with a `gradcafe_test` database (`trust` authentication inside the
-   throwaway container, so no password exists anywhere);
-2. installs Python 3.11 and `requirements.txt`;
-3. runs `pytest module_4 -m "web or buttons or analysis or db or integration"` from the repository root
-   (fails below 100% coverage);
-4. in a second job, builds the Sphinx docs with `-W` (warnings are errors).
+| Job | What it runs | Fails when |
+| --- | --- | --- |
+| Pylint | `pylint src --fail-under=10` | the score is below 10.00/10 |
+| Dependency graph | installs Graphviz, then `pydeps src/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o dependency.svg`; uploads the SVG as the `dependency-graph` artifact | the committed `dependency.svg` is missing, or the modules and imports it shows (the `<title>` of every node and edge) differ from the regenerated graph |
+| Snyk | `snyk test --file=requirements.txt --package-manager=pip`, then `snyk code test`, with the `SNYK_TOKEN` repository secret | any known vulnerability in the pinned packages, any High-severity code finding, or a missing secret (only a pull request from a fork skips the scans) |
+| Pytest | a `postgres:17` service with a `gradcafe_test` database (scram-sha-256 with a throwaway password, so the role tests really check passwords), then `pytest module_5 -m "web or buttons or analysis or db or integration"` from the repository root | any test fails, or coverage is below 100% |
 
-`actions_success.png` shows a green run.
+The graph is compared by its labels rather than byte for byte, because a different Graphviz version
+draws the same graph with a different layout. `snyk code test` lists every finding in the log; only High
+severity fails the job, because the Medium and Low findings are triaged false positives (see
+`module_5_report.pdf`). `actions_success.png` shows a green run.
 
 ## 6. Documentation
 

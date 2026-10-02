@@ -1,0 +1,197 @@
+# Module 5 CI: four separate jobs on every push or pull request that changes module_5/.
+#
+#   pylint  - Pylint on module_5/src must score 10.00/10 (--fail-under=10)
+#   pydeps  - pydeps + Graphviz regenerate dependency.svg; fails if it is missing, or if the
+#             imports it shows no longer match the committed module_5/dependency.svg
+#   snyk    - Snyk scans the pinned dependencies (snyk test, fails on any vulnerability) and
+#             our own code (snyk code test, lists every finding, fails on High severity)
+#   pytest  - the whole suite against a throwaway PostgreSQL; fails below 100% coverage
+#
+# GitHub only runs workflows from .github/workflows at the repository root, so this file is the
+# one that runs.  module_5/.github/workflows/ci.yml is an identical copy kept with the
+# assignment; the pytest job fails if the two ever differ.
+name: ci
+
+on:
+  push:
+    paths: ["module_5/**", ".github/workflows/ci.yml"]
+  pull_request:
+    paths: ["module_5/**", ".github/workflows/ci.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:                        # a newer push to the same branch cancels the older run
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash                     # bash -eo pipefail: any failing command fails the step
+    working-directory: module_5
+
+jobs:
+  pylint:
+    name: Pylint (10.00/10 required)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: module_5/requirements.txt
+
+      - name: Install the pinned environment and the project
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Pylint, failing below 10
+        run: pylint src --fail-under=10
+
+  pydeps:
+    name: Dependency graph (pydeps + Graphviz)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: module_5/requirements.txt
+
+      - name: Install Graphviz (pydeps runs its dot program)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends graphviz
+
+      - name: Install the pinned environment and the project
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Generate dependency.svg
+        run: |
+          cp dependency.svg "$RUNNER_TEMP/committed.svg"     # fails here if the deliverable is missing
+          pydeps src/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o dependency.svg
+
+      - name: dependency.svg was produced and matches the committed graph
+        run: |
+          test -s dependency.svg
+          # Compare the modules and imports (the <title> of every node and edge), not the layout,
+          # which changes with the Graphviz version.
+          diff <(grep -o '<title>[^<]*</title>' "$RUNNER_TEMP/committed.svg" | sort) \
+               <(grep -o '<title>[^<]*</title>' dependency.svg | sort)
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}         # also when the graph differs: download it and commit it
+        with:
+          name: dependency-graph
+          path: module_5/dependency.svg
+
+  snyk:
+    name: Snyk (dependencies and code)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      HAS_SNYK_TOKEN: ${{ secrets.SNYK_TOKEN != '' }}   # the token itself goes only to the scans
+      FORK_PR: ${{ github.event.pull_request.head.repo.fork == true }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: No SNYK_TOKEN secret - skipped on a pull request from a fork, an error otherwise
+        if: env.HAS_SNYK_TOKEN != 'true'
+        run: |
+          if [ "$FORK_PR" = true ]; then
+            echo "::warning::a pull request from a fork gets no secrets; the Snyk scans were skipped"
+          else
+            echo "::error::the SNYK_TOKEN repository secret is missing; Snyk did not run"
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v7
+        if: env.HAS_SNYK_TOKEN == 'true'
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: module_5/requirements.txt
+
+      - name: Install the pinned environment (Snyk reads the installed packages)
+        if: env.HAS_SNYK_TOKEN == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Install the Snyk CLI
+        if: env.HAS_SNYK_TOKEN == 'true'
+        run: npm install --global snyk@1.1307.4
+
+      - name: snyk test - known vulnerabilities in the pinned dependencies (fails on any)
+        if: env.HAS_SNYK_TOKEN == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}         # repository secret; never printed
+        run: snyk test --file=requirements.txt --package-manager=pip
+
+      - name: snyk code test - static analysis of our code (lists every finding, fails on High)
+        if: ${{ !cancelled() && env.HAS_SNYK_TOKEN == 'true' }}   # runs even if snyk test failed
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        # --severity-threshold=high would also hide the Medium and Low findings from this log;
+        # they are triaged false positives, documented in the report.  So the scan lists every
+        # finding, and its SARIF copy decides: SARIF level "error" is a High finding.
+        run: |
+          status=0
+          snyk code test --sarif-file-output="$RUNNER_TEMP/snyk-code.sarif" || status=$?
+          if [ "$status" -ge 2 ]; then exit "$status"; fi    # 2 or 3: Snyk could not run the scan
+          if [ "$status" -eq 0 ]; then exit 0; fi            # no findings at all
+          high=$(jq '[.runs[].results[] | select(.level == "error")] | length' "$RUNNER_TEMP/snyk-code.sarif")
+          echo "High-severity Snyk Code findings: $high"
+          test "$high" -eq 0
+
+  pytest:
+    name: Pytest (100% coverage required)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: gradcafe
+          POSTGRES_DB: gradcafe_test                       # the tests only run against a *_test database
+          POSTGRES_PASSWORD: ci-throwaway-not-a-secret     # this throwaway container only
+          POSTGRES_HOST_AUTH_METHOD: scram-sha-256         # real password checks, so the role tests mean something
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gradcafe -d gradcafe_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://gradcafe@localhost:5432/gradcafe_test
+      PGPASSWORD: ci-throwaway-not-a-secret     # libpq reads it; the URL stays free of passwords
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The workflow copy under module_5 matches this file
+        run: cmp ../.github/workflows/ci.yml .github/workflows/ci.yml
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: module_5/requirements.txt
+
+      - name: Install the pinned environment and the project
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run the test suite from the repository root (pytest.ini measures module_5/src)
+        working-directory: .
+        run: pytest module_5 -m "web or buttons or analysis or db or integration"
