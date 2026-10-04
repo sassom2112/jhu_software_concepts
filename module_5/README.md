@@ -6,6 +6,7 @@
 
 | | |
 | --- | --- |
+| Report | [`module_5_report.pdf`](module_5_report.pdf): install, Pylint, SQL injection defenses, least privilege, dependency graph, packaging, Snyk, CI |
 | Continuous integration | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) · proof: [`actions_success.png`](actions_success.png) |
 | Pylint 10.00/10 | `cd module_5 && pylint src` (section 4) · proof: [`pylint_and_tests.png`](pylint_and_tests.png) |
 | Tests and coverage | [`coverage_summary.txt`](coverage_summary.txt): 331 tests, 100% of `module_5/src` |
@@ -34,6 +35,7 @@ Module 5 takes the Module 4 Grad Café application and hardens it:
 ```
 module_5/
 ├── README.md                 # this file
+├── module_5_report.pdf       # the written report
 ├── setup.py                  # makes the project installable: pip install -e .
 ├── requirements.txt          # exact versions of all 32 packages (app, tests, pylint, pydeps)
 ├── pytest.ini                # markers + --cov=module_5/src --cov-fail-under=100
