@@ -65,12 +65,14 @@
 <li class="toctree-l4"><a class="reference internal" href="#webapp.routes.index"><code class="docutils literal notranslate"><span class="pre">index()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#webapp.routes.pull_data"><code class="docutils literal notranslate"><span class="pre">pull_data()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#webapp.routes.update_analysis"><code class="docutils literal notranslate"><span class="pre">update_analysis()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.routes.api_applicants"><code class="docutils literal notranslate"><span class="pre">api_applicants()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-webapp.services">Services and the busy flag</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#webapp.services.PullState"><code class="docutils literal notranslate"><span class="pre">PullState</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#webapp.services.default_scrape_fn"><code class="docutils literal notranslate"><span class="pre">default_scrape_fn()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#webapp.services.default_load_fn"><code class="docutils literal notranslate"><span class="pre">default_load_fn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.services.default_search_fn"><code class="docutils literal notranslate"><span class="pre">default_search_fn()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-run">Start-up script</a></li>
@@ -143,7 +145,7 @@ load is rolled back).</p></td>
 </section>
 <section id="module-webapp">
 <span id="application-factory"></span><h2>Application factory<a class="headerlink" href="#module-webapp" title="Link to this heading"></a></h2>
-<p>webapp - Flask front end for the Grad Café analysis (Module 4).</p>
+<p>webapp - Flask front end for the Grad Café analysis (Module 5).</p>
 <p>create_app() is the application factory.  Every external dependency the
 routes need — the scraper, the loader, the analysis query — is injected as a
 keyword argument with a production default, so tests can call:</p>
@@ -151,10 +153,12 @@ keyword argument with a production default, so tests can call:</p>
 </pre></div>
 </div>
 <p>and get a fully working Flask app wired to fakes, with no real network call
-and no real database required unless a test wants one.</p>
+and no real database required unless a test wants one.  Importing this
+package imports orm_queries (and so models), which builds the SQLAlchemy
+engine but never opens a connection.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="webapp.create_app">
-<span class="sig-prename descclassname"><span class="pre">webapp.</span></span><span class="sig-name descname"><span class="pre">create_app</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scrape_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">load_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp.html#create_app"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.create_app" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">webapp.</span></span><span class="sig-name descname"><span class="pre">create_app</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scrape_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">load_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp.html#create_app"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.create_app" title="Link to this definition"></a></dt>
 <dd><p>Build and configure the Flask application.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -166,6 +170,9 @@ services.default_load_fn (cleans, then writes to PostgreSQL).</p></li>
 <li><p><strong>query_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>dict</em><em>] </em><em>| </em><em>None</em>) – no-argument callable returning the dict the analysis page
 renders.  Defaults to orm_queries.get_analysis (reads PostgreSQL
 through the SQLAlchemy model).</p></li>
+<li><p><strong>search_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>SearchRequest</em><em>]</em><em>, </em><em>list</em><em>[</em><em>dict</em><em>]</em><em>] </em><em>| </em><em>None</em>) – callable(SearchRequest) -&gt; rows for GET /api/applicants.
+Defaults to services.default_search_fn (a read-only, parameterized
+query; see applicant_search.py).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -183,6 +190,7 @@ through the SQLAlchemy model).</p></li>
 GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
 POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
 POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
+GET  /api/applicants   filtered, sorted, LIMITed rows as JSON (see applicant_search.py)
 </pre></div>
 </div>
 <dl class="py function">
@@ -209,6 +217,13 @@ POST /update-analysis  no-op that just confirms the page can be refreshed; 409 i
 <dd><p>Confirms the page can be refreshed; performs no database work and never gates on itself.</p>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.routes.api_applicants">
+<span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">api_applicants</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#api_applicants"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.api_applicants" title="Link to this definition"></a></dt>
+<dd><p>Search stored applicants: ?term=&amp;status=&amp;degree=&amp;us_or_international=&amp;program=
+&amp;sort=&amp;order=&amp;limit= .  Invalid parameters get 400; at most MAX_LIMIT rows come back.</p>
+</dd></dl>
+
 </section>
 <section id="module-webapp.services">
 <span id="services-and-the-busy-flag"></span><h2>Services and the busy flag<a class="headerlink" href="#module-webapp.services" title="Link to this heading"></a></h2>
@@ -219,7 +234,7 @@ and the whole point was to survive a server restart.  That design is very
 hard to unit test: a real test would have to start a real subprocess, poll a
 real file, and wait — exactly the kind of slow, flaky, sleep()-based test the
 assignment forbids.</p>
-<p>Module 4’s “Pull Data” is scoped narrower (only entries newer than what is
+<p>The web app’s “Pull Data” is scoped narrower (only entries newer than what is
 already stored, via GradCafeScraper.scrape_new_entries), which finishes in
 seconds to at most a couple of minutes.  That lets the whole pipeline run
 in-process, inside the request, which makes it trivially testable: a test
@@ -227,6 +242,8 @@ just swaps SCRAPE_FN and LOAD_FN for fakes and calls the route directly.</p>
 <p>PullState.is_running is the “busy” flag both buttons check.  It is a plain
 boolean guarded by a lock – not a sleep(), not a poll loop – so tests can
 set it directly to force the busy path (see tests/test_buttons.py).</p>
+<p>default_search_fn serves GET /api/applicants: the one path where user input
+reaches SQL (see applicant_search.py for the injection defences).</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="webapp.services.PullState">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">PullState</span></span><a class="reference internal" href="../_modules/webapp/services.html#PullState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.PullState" title="Link to this definition"></a></dt>
@@ -268,8 +285,9 @@ set it directly to force the busy path (see tests/test_buttons.py).</p>
 <dt class="sig sig-object py" id="webapp.services.default_scrape_fn">
 <span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">default_scrape_fn</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#default_scrape_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.default_scrape_fn" title="Link to this definition"></a></dt>
 <dd><p>Production scraper: entries newer than what PostgreSQL already has.</p>
-<p>Imports are local so importing this module never requires network access
-or a live database (tests never call this function; they inject fakes).</p>
+<p>Importing this module never requires network access or a live database;
+both are touched only when this function runs.  GradCafeScraper is looked
+up on the scrape module at call time, so a test can monkeypatch it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>list[dict]</p>
@@ -282,15 +300,34 @@ or a live database (tests never call this function; they inject fakes).</p>
 <span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">default_load_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_entries</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#default_load_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.default_load_fn" title="Link to this definition"></a></dt>
 <dd><p>Production loader: clean the raw entries, then insert them.</p>
 <p>Standardizing program/university names with the local LLM is a separate,
-optional, much slower step (see module_4/llm_hosting); new rows land with
+optional, much slower step (see module_5/llm_hosting); new rows land with
 llm_generated_program/llm_generated_university left NULL until that step
 is run, the same way any other not-yet-standardized row would.</p>
+<p>It never creates or alters tables: that is an administrator’s job
+(<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">src/load_data.py</span></code> as the table owner), so the web app can run
+as a least-privilege database user with only SELECT and INSERT.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>raw_entries</strong> (<em>list</em><em>[</em><em>dict</em><em>]</em>)</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.services.default_search_fn">
+<span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">default_search_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#default_search_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.default_search_fn" title="Link to this definition"></a></dt>
+<dd><p>Production search for GET /api/applicants, in a read-only transaction.</p>
+<p>read_only=True makes PostgreSQL itself refuse any write in this session,
+a second line of defence behind the parameterized query.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>request</strong> (<em>SearchRequest</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[dict]</p>
 </dd>
 </dl>
 </dd></dl>

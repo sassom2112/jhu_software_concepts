@@ -40,7 +40,7 @@ DATA_NOTES_STATEMENT = sql.SQL("""
     LIMIT {limit}
 """).format(table=sql.Identifier(TABLE_NAME), limit=sql.Placeholder("limit"))
 
-# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# The module folder (module_5/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
 HERE = Path(__file__).resolve().parent.parent
 OUTPUT = HERE / "query_results.html"
@@ -137,10 +137,10 @@ def main() -> int:
     answers, notes = results
     body = "\n".join(_answer_html(a) for a in answers)
     document = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">\
-<title>Module 4 SQL Query Results</title>
+<title>Module 5 SQL Query Results</title>
 <style>{CSS}</style></head><body>
 <h1>Grad Café SQL Analysis: Query Results</h1>
-<p class="sub">JHU EN.605.256 Modern Software Concepts in Python · Module 4 · \
+<p class="sub">JHU EN.605.256 Modern Software Concepts in Python · Module 5 · \
 generated {datetime.now():%B %d, %Y %H:%M}</p>
 <div class="meta">{notes}
 <p><b>Matching conventions:</b> text comparisons ignore capitalization and surrounding spaces; \

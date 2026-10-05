@@ -89,7 +89,7 @@ hard to unit test: a real test would have to start a real subprocess, poll a
 real file, and wait — exactly the kind of slow, flaky, sleep()-based test the
 assignment forbids.
 
-Module 4's "Pull Data" is scoped narrower (only entries newer than what is
+The web app's "Pull Data" is scoped narrower (only entries newer than what is
 already stored, via GradCafeScraper.scrape_new_entries), which finishes in
 seconds to at most a couple of minutes.  That lets the whole pipeline run
 in-process, inside the request, which makes it trivially testable: a test
@@ -98,11 +98,30 @@ just swaps SCRAPE_FN and LOAD_FN for fakes and calls the route directly.
 PullState.is_running is the "busy" flag both buttons check.  It is a plain
 boolean guarded by a lock -- not a sleep(), not a poll loop -- so tests can
 set it directly to force the busy path (see tests/test_buttons.py).
+
+default_search_fn serves GET /api/applicants: the one path where user input
+reaches SQL (see applicant_search.py for the injection defences).
 """
 
 from __future__ import annotations
 
 import threading
+
+from psycopg import sql
+
+import applicant_search
+import clean
+import load_data
+import scrape
+from db_config import TABLE_NAME
+from query_limits import MAX_LIMIT
+
+# The stored ids that tell the scraper where new entries end.  The listing is
+# newest-first and the scraper stops at the first page holding a stored id, so
+# the newest MAX_LIMIT ids are all it needs -- never the whole table.
+KNOWN_IDS_STATEMENT = sql.SQL("SELECT {key} FROM {table} ORDER BY {key} DESC LIMIT {limit}").format(
+    key=sql.Identifier("p_id"), table=sql.Identifier(TABLE_NAME), limit=sql.Placeholder("limit")
+)
 
 
 <div class="viewcode-block" id="PullState">
@@ -145,17 +164,15 @@ class PullState:
 def default_scrape_fn() -&gt; list[dict]:
     """Production scraper: entries newer than what PostgreSQL already has.
 
-    Imports are local so importing this module never requires network access
-    or a live database (tests never call this function; they inject fakes).
+    Importing this module never requires network access or a live database;
+    both are touched only when this function runs.  GradCafeScraper is looked
+    up on the scrape module at call time, so a test can monkeypatch it.
     """
-    from load_data import connect
-    from scrape import GradCafeScraper
-
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT p_id FROM applicants")
+    with load_data.connect() as conn, conn.cursor() as cur:
+        cur.execute(KNOWN_IDS_STATEMENT, {"limit": MAX_LIMIT})
         known_ids = {row[0] for row in cur}
 
-    scraper = GradCafeScraper(cache_html=False)
+    scraper = scrape.GradCafeScraper(cache_html=False)
     entries, _pages, _resume_url = scraper.scrape_new_entries(known_ids, max_pages=50)
     return entries</div>
 
@@ -167,20 +184,34 @@ def default_load_fn(raw_entries: list[dict]) -&gt; int:
     """Production loader: clean the raw entries, then insert them.
 
     Standardizing program/university names with the local LLM is a separate,
-    optional, much slower step (see module_4/llm_hosting); new rows land with
+    optional, much slower step (see module_5/llm_hosting); new rows land with
     llm_generated_program/llm_generated_university left NULL until that step
     is run, the same way any other not-yet-standardized row would.
-    """
-    from clean import clean_data
-    from load_data import connect, create_table, load_records
 
+    It never creates or alters tables: that is an administrator's job
+    (``python src/load_data.py`` as the table owner), so the web app can run
+    as a least-privilege database user with only SELECT and INSERT.
+    """
     if not raw_entries:
         return 0
-    cleaned = clean_data(raw_entries)
-    with connect() as conn:
-        create_table(conn)
-        inserted, _present, _unusable = load_records(conn, cleaned)
+    cleaned = clean.clean_data(raw_entries)
+    with load_data.connect() as conn:
+        inserted, _present, _unusable = load_data.load_records(conn, cleaned)
     return inserted</div>
+
+
+
+<div class="viewcode-block" id="default_search_fn">
+<a class="viewcode-back" href="../../api/web.html#webapp.services.default_search_fn">[docs]</a>
+def default_search_fn(request: applicant_search.SearchRequest) -&gt; list[dict]:
+    """Production search for GET /api/applicants, in a read-only transaction.
+
+    read_only=True makes PostgreSQL itself refuse any write in this session,
+    a second line of defence behind the parameterized query.
+    """
+    with load_data.connect() as conn:
+        conn.read_only = True
+        return applicant_search.search_applicants(conn, request)</div>
 
 </pre></div>
 

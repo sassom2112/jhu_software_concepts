@@ -416,13 +416,14 @@ def answer_q11(cur: psycopg.Cursor) -> Answer:
 
 ANSWER_FUNCTIONS = (answer_q1, answer_q2, answer_q3, answer_q4, answer_q5, answer_q6,
                     answer_q7, answer_q8, answer_q9, answer_q10, answer_q11)
+READ_ONLY_STATEMENT = sql.SQL("SET TRANSACTION READ ONLY")
 
 
 def run_all(conn: psycopg.Connection) -> list[Answer]:
     """Run every question inside one read-only transaction (a consistent snapshot)."""
     with conn.transaction():
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql.SQL("SET TRANSACTION READ ONLY"))
+            cur.execute(READ_ONLY_STATEMENT)
             return [function(cur) for function in ANSWER_FUNCTIONS]
 
 

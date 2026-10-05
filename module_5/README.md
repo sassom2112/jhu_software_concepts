@@ -7,7 +7,7 @@
 | | |
 | --- | --- |
 | Report | [`module_5_report.pdf`](module_5_report.pdf): install, Pylint, SQL injection defenses, least privilege, dependency graph, packaging, Snyk, CI |
-| Continuous integration | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) · proof: [`actions_success.png`](actions_success.png) |
+| Continuous integration | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) · proof: [`actions_success.png`](actions_success.png) |
 | Pylint 10.00/10 | `cd module_5 && pylint src` (section 4) · proof: [`pylint_and_tests.png`](pylint_and_tests.png) |
 | Tests and coverage | [`coverage_summary.txt`](coverage_summary.txt): 331 tests, 100% of `module_5/src` |
 | Dependency graph | [`dependency.svg`](dependency.svg) (pydeps + Graphviz, section 6) |
@@ -19,8 +19,9 @@ Module 5 takes the Module 4 Grad Café application and hardens it:
 * **Pylint 10.00/10** on `src/` with Pylint's default settings, reached by refactoring rather than by switching
   checks off;
 * **SQL injection defenses**: every query is built with psycopg's `sql` module, values are always bound
-  parameters, table and column names come from allow-lists, and every query has a `LIMIT` that is clamped
-  to 1-100. A new search API, `GET /api/applicants`, is the one place where typed text reaches SQL;
+  parameters, table and column names come from allow-lists, every `SELECT` has a `LIMIT`, and every limit
+  that comes from a request is clamped to 1-100. A new search API, `GET /api/applicants`, is the one place
+  where typed text reaches SQL;
 * **database credentials from environment variables** and a **least-privilege role**, `gradcafe_app`, that may
   only read and add rows;
 * a **dependency graph**, `dependency.svg`, made with pydeps and Graphviz;
@@ -61,7 +62,7 @@ module_5/
 │
 │   Evidence
 ├── coverage_summary.txt      # terminal output of the full test run
-├── pylint_and_tests.png      # pylint 10.00/10 and 331 passed
+├── pylint_and_tests.png      # pylint 10.00/10 and the tests (330 when taken; 331 now)
 ├── dependency.svg            # the dependency graph
 ├── snyk-analysis.png         # snyk test after the fix: no vulnerable paths
 ├── snyk-code-analysis.png    # snyk code test: 0 High, 1 Medium, 3 Low
@@ -202,10 +203,10 @@ Result: `Your code has been rated at 10.00/10`, with Pylint's default settings (
 CI runs `pylint src --fail-under=10`. Getting there meant real changes: `scrape.py` was split into
 `site_urls.py`, `robots_rules.py`, `scrape_state.py` and `jsonio.py`; a circular import was removed; shared
 code moved into `db_config.run_with_connection()` and `analysis_common.print_answers()`; and the routes catch a
-short list of expected errors instead of every `Exception`. Four checks are switched off on a single line
-each, with a comment, because Pylint is wrong about them: `not-callable` for SQLAlchemy's `func` in
-`orm_queries.py`, `too-few-public-methods` on the ORM classes `Base` and `Applicant`, and `invalid-name` on
-the session factory `SessionLocal`.
+short list of expected errors instead of every `Exception`. Pylint is switched off by four comments, each
+explaining why it is wrong there: `not-callable` for all of `orm_queries.py` (SQLAlchemy generates `func.count()`
+and similar at run time), and on single lines `too-few-public-methods` on the ORM classes `Base` and
+`Applicant` and `invalid-name` on the session factory `SessionLocal`.
 
 ## 5. Security
 
@@ -217,8 +218,8 @@ built.
 | Values are bound parameters (`%(name)s`), never pasted into SQL text | every query; `applicant_search.build_search_query()` for the search API |
 | Table and column names come from allow-lists and are quoted with `sql.Identifier` | `applicant_search.py` (`SORTABLE_COLUMNS`, `EXACT_FILTERS`, `CONTAINS_FILTERS`), `load_data.py`, `query_data.py` |
 | The sort direction is one of two fixed SQL fragments, never copied from the request | `applicant_search.py` |
-| Every query ends in `LIMIT`, and limits from outside are clamped to 1-100 | `query_limits.clamp_limit()`; `LIMIT` in `query_data.py`, `load_data.py`, `db_roles.py`, `webapp/services.py`; `.limit()` on every ORM query |
-| Building a statement and running it are separate steps | `build_search_query()` returns `(statement, params)` and touches no database; `search_applicants()` only executes |
+| Every `SELECT` has a `LIMIT`, and every limit that comes from a request is clamped to 1-100 | `query_limits.clamp_limit()`; `LIMIT` in `query_data.py`, `load_data.py`, `db_roles.py`, `webapp/services.py`; `.limit()` on every ORM query. The loader's `INSERT ... SELECT` is capped at its batch size; DDL, `GRANT` and `COPY` take no `LIMIT` |
+| Building a statement and running it are separate steps | `build_search_query()` returns `(statement, params)` and touches no database; `search_applicants()` only executes. Every other statement is a module-level constant |
 | Errors never echo database details | the search API and Pull Data return fixed messages and log only the exception class |
 | The search runs in a read-only transaction | `webapp/services.default_search_fn()` |
 
@@ -227,6 +228,12 @@ built.
 directions outside the allow-list, LIKE wildcards, and limits such as `0` and `1000000` (clamped to 1 and
 100) or `10; DROP TABLE applicants` (refused with 400). It checks that nothing extra comes back and that
 every row is still there.
+
+Two details a reader might question: the one `+` in `applicant_search.py` joins two psycopg `sql` objects
+(the result is a `sql.Composed`, not a string), and the one f-string there builds a LIKE *value* that is
+then bound as a parameter. The role password in `db_roles.py` is the only value written into SQL text,
+because `CREATE ROLE ... PASSWORD` cannot take a bound parameter; it comes from `APP_DB_PASSWORD` (never from
+a web request), and `sql.Literal` quotes and escapes it.
 
 **Least privilege.** The web app logs in as `gradcafe_app`, created by `src/db_roles.py`:
 

@@ -27,7 +27,7 @@ from pathlib import Path
 
 from jsonio import load_data, local_name, save_data
 
-# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# The module folder (module_5/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
 HERE = Path(__file__).resolve().parent.parent
 

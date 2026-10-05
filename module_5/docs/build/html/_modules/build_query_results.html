@@ -89,7 +89,8 @@ exact SQL that query_data.py executes, and an explanation.  Print the HTML to
 PDF with any browser (File &gt; Print &gt; Save as PDF), or headless Chrome::
 
     python build_query_results.py
-    google-chrome --headless --no-pdf-header-footer --print-to-pdf=query_results.pdf query_results.html
+    google-chrome --headless --no-pdf-header-footer \\
+        --print-to-pdf=query_results.pdf query_results.html
 """
 
 from __future__ import annotations
@@ -100,31 +101,52 @@ from datetime import datetime
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 
 import analysis_common as rules
 import query_data
-from db_config import CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, describe_target, get_database_url
+from db_config import TABLE_NAME, run_with_connection
 
-# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# The counts behind the report's "valid-range rule" note: one row, composed
+# with psycopg's sql module (table name quoted as an Identifier, LIMIT bound).
+DATA_NOTES_STATEMENT = sql.SQL("""
+    SELECT COUNT(*),
+           COUNT(gre) FILTER (WHERE gre NOT BETWEEN 130 AND 170),
+           COUNT(gre) FILTER (WHERE gre BETWEEN 260 AND 340),
+           COUNT(gre_aw) FILTER (WHERE gre_aw NOT BETWEEN 0 AND 6),
+           COUNT(gpa) FILTER (WHERE NOT (gpa &gt; 0 AND gpa &lt;= 4.0)),
+           ROUND(AVG(gre)::numeric, 2), MAX(date_added), MIN(date_added)
+    FROM {table}
+    LIMIT {limit}
+""").format(table=sql.Identifier(TABLE_NAME), limit=sql.Placeholder("limit"))
+
+# The module folder (module_5/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
 HERE = Path(__file__).resolve().parent.parent
 OUTPUT = HERE / "query_results.html"
 
+# A backslash at the end of a line inside the strings below joins it to the next line, so
+# the generated CSS and HTML keep one rule (or sentence) per line while this file stays
+# within 100 columns.
 CSS = """
 @page { size: Letter; margin: 0.6in 0.65in; }
 body { font: 10.5pt/1.45 "Segoe UI", Roboto, Arial, sans-serif; color: #1d2433; }
 h1 { font-size: 19pt; margin: 0 0 2pt; color: #002d72; }
 .sub { color: #5b6475; margin: 0 0 14pt; }
-.meta { border: 1px solid #dfe3ea; border-radius: 6pt; padding: 8pt 10pt; margin-bottom: 16pt; background: #f7f9fc; }
+.meta { border: 1px solid #dfe3ea; border-radius: 6pt; padding: 8pt 10pt; \
+margin-bottom: 16pt; background: #f7f9fc; }
 .meta p { margin: 2pt 0; }
-section { break-inside: avoid-page; border-top: 2px solid #002d72; padding-top: 8pt; margin-bottom: 16pt; }
+section { break-inside: avoid-page; border-top: 2px solid #002d72; padding-top: 8pt; \
+margin-bottom: 16pt; }
 h2 { font-size: 12.5pt; margin: 0 0 4pt; color: #002d72; }
 .question { font-weight: 600; margin: 0 0 6pt; }
-.label { font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #5b6475; margin: 8pt 0 2pt; }
+.label { font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #5b6475; \
+margin: 8pt 0 2pt; }
 .result { background: #e7eef9; border-radius: 5pt; padding: 6pt 9pt; }
 .result p { margin: 1pt 0; }
 .result strong { color: #002d72; }
-pre { background: #f5f6f8; border: 1px solid #dfe3ea; border-radius: 5pt; padding: 7pt 9pt; font: 8.6pt/1.35 Consolas, "DejaVu Sans Mono", monospace; white-space: pre-wrap; margin: 0; }
+pre { background: #f5f6f8; border: 1px solid #dfe3ea; border-radius: 5pt; padding: 7pt 9pt; \
+font: 8.6pt/1.35 Consolas, "DejaVu Sans Mono", monospace; white-space: pre-wrap; margin: 0; }
 table { border-collapse: collapse; width: 100%; font-size: 9.5pt; }
 th, td { border-bottom: 1px solid #c9d3e3; padding: 3pt 6pt; text-align: right; }
 th:first-child, td:first-child { text-align: left; }
@@ -141,70 +163,72 @@ def _answer_html(answer: query_data.Answer) -&gt; str:
         number, separator, rest = value.partition(" (")  # bold the number, not "(n = ...)"
         value_html = html.escape(value)
         if index == 0:
-            value_html = f"&lt;strong&gt;{html.escape(number)}&lt;/strong&gt;" + (f" ({html.escape(rest)}" if separator else "")
+            value_html = f"&lt;strong&gt;{html.escape(number)}&lt;/strong&gt;"
+            if separator:
+                value_html += f" ({html.escape(rest)}"
         parts.append(f"&lt;p&gt;{html.escape(label)}: {value_html}&lt;/p&gt;")
     if answer.table:
-        parts.append("&lt;table&gt;&lt;thead&gt;&lt;tr&gt;" + "".join(f"&lt;th&gt;{html.escape(c)}&lt;/th&gt;" for c in answer.columns) + "&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;")
+        header = "".join(f"&lt;th&gt;{html.escape(c)}&lt;/th&gt;" for c in answer.columns)
+        parts.append(f"&lt;table&gt;&lt;thead&gt;&lt;tr&gt;{header}&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;")
         for row in answer.table:
             parts.append("&lt;tr&gt;" + "".join(f"&lt;td&gt;{html.escape(str(v))}&lt;/td&gt;" for v in row) + "&lt;/tr&gt;")
         parts.append("&lt;/tbody&gt;&lt;/table&gt;")
     parts.append("&lt;/div&gt;")
-    parts.append(f"&lt;p class='label'&gt;SQL query (as executed by query_data.py)&lt;/p&gt;&lt;pre&gt;{html.escape(answer.sql)}&lt;/pre&gt;")
-    parts.append(f"&lt;p class='label'&gt;What the query does&lt;/p&gt;&lt;p class='explain'&gt;{html.escape(answer.explanation)}&lt;/p&gt;&lt;/section&gt;")
+    parts.append("&lt;p class='label'&gt;SQL query (as executed by query_data.py)&lt;/p&gt;"
+                 f"&lt;pre&gt;{html.escape(answer.sql)}&lt;/pre&gt;")
+    parts.append("&lt;p class='label'&gt;What the query does&lt;/p&gt;"
+                 f"&lt;p class='explain'&gt;{html.escape(answer.explanation)}&lt;/p&gt;&lt;/section&gt;")
     return "\n".join(parts)
 
 
 def _data_notes(conn: psycopg.Connection) -&gt; str:
     """Live counts that justify the valid-range rule used for the averages."""
     with conn.cursor() as cur:
-        cur.execute("""
-            SELECT COUNT(*),
-                   COUNT(gre) FILTER (WHERE gre NOT BETWEEN 130 AND 170),
-                   COUNT(gre) FILTER (WHERE gre BETWEEN 260 AND 340),
-                   COUNT(gre_aw) FILTER (WHERE gre_aw NOT BETWEEN 0 AND 6),
-                   COUNT(gpa) FILTER (WHERE NOT (gpa &gt; 0 AND gpa &lt;= 4.0)),
-                   ROUND(AVG(gre)::numeric, 2), MAX(date_added), MIN(date_added)
-            FROM applicants
-        """)
+        cur.execute(DATA_NOTES_STATEMENT, {"limit": 1})
         total, bad_q, totals_q, bad_aw, bad_gpa, naive_q, newest, oldest = cur.fetchone()
     # An empty table has no oldest/newest date and no average: say so instead of crashing.
-    span = f"added between {oldest:%B %d, %Y} and {newest:%B %d, %Y}" if oldest and newest else "with no dates recorded"
-    return (f"&lt;p&gt;&lt;b&gt;Database:&lt;/b&gt; {total:,} entries {span}.&lt;/p&gt;"
-            f"&lt;p&gt;&lt;b&gt;Valid-range rule for averages:&lt;/b&gt; a score counts as provided only on its official scale "
-            f"(GPA above {rules.GPA_MIN_EXCLUSIVE:g} and at most {rules.GPA_MAX:g}; GRE Verbal and Quantitative "
-            f"{rules.GRE_SECTION_MIN:g}–{rules.GRE_SECTION_MAX:g}; Analytical Writing {rules.GRE_AW_MIN:g}–{rules.GRE_AW_MAX:g}). "
-            f"In this database {bad_q:,} values in the GRE Quantitative column are off that scale, {totals_q:,} of them "
-            f"260–340 composite totals; averaging the column as stored would give {rules.format_average(naive_q)}. Also excluded: {bad_aw:,} "
-            f"Analytical Writing values and {bad_gpa:,} GPAs off their scales. Stored values are never modified.&lt;/p&gt;")
+    if oldest and newest:
+        span = f"added between {oldest:%B %d, %Y} and {newest:%B %d, %Y}"
+    else:
+        span = "with no dates recorded"
+    return (
+        f"&lt;p&gt;&lt;b&gt;Database:&lt;/b&gt; {total:,} entries {span}.&lt;/p&gt;"
+        "&lt;p&gt;&lt;b&gt;Valid-range rule for averages:&lt;/b&gt; a score counts as provided only on its "
+        f"official scale (GPA above {rules.GPA_MIN_EXCLUSIVE:g} and at most {rules.GPA_MAX:g}; "
+        f"GRE Verbal and Quantitative {rules.GRE_SECTION_MIN:g}–{rules.GRE_SECTION_MAX:g}; "
+        f"Analytical Writing {rules.GRE_AW_MIN:g}–{rules.GRE_AW_MAX:g}). "
+        f"In this database {bad_q:,} values in the GRE Quantitative column are off that scale, "
+        f"{totals_q:,} of them 260–340 composite totals; averaging the column as stored would "
+        f"give {rules.format_average(naive_q)}. Also excluded: {bad_aw:,} Analytical Writing "
+        f"values and {bad_gpa:,} GPAs off their scales. Stored values are never modified.&lt;/p&gt;"
+    )
+
+
+def _answers_and_notes(conn: psycopg.Connection) -&gt; tuple[list[query_data.Answer], str]:
+    """Every answer (query_data.run_all) and the data notes, read on one connection."""
+    return query_data.run_all(conn), _data_notes(conn)
 
 
 <div class="viewcode-block" id="main">
 <a class="viewcode-back" href="../api/database.html#build_query_results.main">[docs]</a>
 def main() -&gt; int:
     """Command line: write query_results.html; returns 0, 2 (cannot connect) or 3 (query failed)."""
-    try:
-        conn = psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
-    except psycopg.ProgrammingError:
-        print(INVALID_SETTINGS_MESSAGE, file=sys.stderr)
-        return 2
-    except psycopg.OperationalError as err:
-        print(f"error: cannot connect to PostgreSQL at {describe_target()}: {err}", file=sys.stderr)
-        return 2
-    try:
-        with conn:
-            answers = query_data.run_all(conn)
-            notes = _data_notes(conn)
-    except psycopg.Error as err:
-        print(f"error: query failed: {err}", file=sys.stderr)
-        return 3
+    status, results = run_with_connection(_answers_and_notes)
+    if status:
+        return status
+    answers, notes = results
     body = "\n".join(_answer_html(a) for a in answers)
-    document = f"""&lt;!doctype html&gt;&lt;html lang="en"&gt;&lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Module 4 SQL Query Results&lt;/title&gt;
+    document = f"""&lt;!doctype html&gt;&lt;html lang="en"&gt;&lt;head&gt;&lt;meta charset="utf-8"&gt;\
+&lt;title&gt;Module 5 SQL Query Results&lt;/title&gt;
 &lt;style&gt;{CSS}&lt;/style&gt;&lt;/head&gt;&lt;body&gt;
 &lt;h1&gt;Grad Café SQL Analysis: Query Results&lt;/h1&gt;
-&lt;p class="sub"&gt;JHU EN.605.256 Modern Software Concepts in Python · Module 4 · generated {datetime.now():%B %d, %Y %H:%M}&lt;/p&gt;
+&lt;p class="sub"&gt;JHU EN.605.256 Modern Software Concepts in Python · Module 5 · \
+generated {datetime.now():%B %d, %Y %H:%M}&lt;/p&gt;
 &lt;div class="meta"&gt;{notes}
-&lt;p&gt;&lt;b&gt;Matching conventions:&lt;/b&gt; text comparisons ignore capitalization and surrounding spaces; an acceptance is a status
-starting with "accept"; regular expressions use PostgreSQL's ~* (case-insensitive) operator, where \\m and \\M mark word boundaries.&lt;/p&gt;&lt;/div&gt;
+&lt;p&gt;&lt;b&gt;Matching conventions:&lt;/b&gt; text comparisons ignore capitalization and surrounding spaces; \
+an acceptance is a status
+starting with "accept"; regular expressions use PostgreSQL's ~* (case-insensitive) operator, \
+where \\m and \\M mark word boundaries.&lt;/p&gt;&lt;/div&gt;
 {body}
 &lt;/body&gt;&lt;/html&gt;"""
     OUTPUT.write_text(document, encoding="utf-8")

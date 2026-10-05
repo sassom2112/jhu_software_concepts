@@ -8,7 +8,7 @@ hard to unit test: a real test would have to start a real subprocess, poll a
 real file, and wait — exactly the kind of slow, flaky, sleep()-based test the
 assignment forbids.
 
-Module 4's "Pull Data" is scoped narrower (only entries newer than what is
+The web app's "Pull Data" is scoped narrower (only entries newer than what is
 already stored, via GradCafeScraper.scrape_new_entries), which finishes in
 seconds to at most a couple of minutes.  That lets the whole pipeline run
 in-process, inside the request, which makes it trivially testable: a test
@@ -89,7 +89,7 @@ def default_load_fn(raw_entries: list[dict]) -> int:
     """Production loader: clean the raw entries, then insert them.
 
     Standardizing program/university names with the local LLM is a separate,
-    optional, much slower step (see module_4/llm_hosting); new rows land with
+    optional, much slower step (see module_5/llm_hosting); new rows land with
     llm_generated_program/llm_generated_university left NULL until that step
     is run, the same way any other not-yet-standardized row would.
 

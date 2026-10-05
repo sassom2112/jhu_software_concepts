@@ -60,6 +60,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#db_config.get_database_url"><code class="docutils literal notranslate"><span class="pre">get_database_url()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#db_config.get_sqlalchemy_url"><code class="docutils literal notranslate"><span class="pre">get_sqlalchemy_url()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#db_config.describe_target"><code class="docutils literal notranslate"><span class="pre">describe_target()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#db_config.run_with_connection"><code class="docutils literal notranslate"><span class="pre">run_with_connection()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-models">ORM model</a><ul>
@@ -71,12 +72,15 @@
 <li class="toctree-l4"><a class="reference internal" href="#analysis_common.format_count"><code class="docutils literal notranslate"><span class="pre">format_count()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#analysis_common.format_percent"><code class="docutils literal notranslate"><span class="pre">format_percent()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#analysis_common.format_average"><code class="docutils literal notranslate"><span class="pre">format_average()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#analysis_common.format_average_with_count"><code class="docutils literal notranslate"><span class="pre">format_average_with_count()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#analysis_common.format_difference"><code class="docutils literal notranslate"><span class="pre">format_difference()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#analysis_common.format_table"><code class="docutils literal notranslate"><span class="pre">format_table()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#analysis_common.print_answers"><code class="docutils literal notranslate"><span class="pre">print_answers()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-query_data">Questions in raw SQL</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.Answer"><code class="docutils literal notranslate"><span class="pre">Answer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#query_data.statement_params"><code class="docutils literal notranslate"><span class="pre">statement_params()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q1"><code class="docutils literal notranslate"><span class="pre">answer_q1()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q2"><code class="docutils literal notranslate"><span class="pre">answer_q2()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q3"><code class="docutils literal notranslate"><span class="pre">answer_q3()</span></code></a></li>
@@ -89,7 +93,6 @@
 <li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q10"><code class="docutils literal notranslate"><span class="pre">answer_q10()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.answer_q11"><code class="docutils literal notranslate"><span class="pre">answer_q11()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.run_all"><code class="docutils literal notranslate"><span class="pre">run_all()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#query_data.print_answers"><code class="docutils literal notranslate"><span class="pre">print_answers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#query_data.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
 </ul>
 </li>
@@ -158,21 +161,36 @@ environment variables, in this order of preference:</p>
 <div><ol class="arabic simple">
 <li><p>DATABASE_URL: a URL such as  postgresql://gradcafe&#64;localhost:5432/gradcafe
 (a libpq “key=value” string such as  host=localhost dbname=gradcafe  and the
-SQLAlchemy spelling postgresql+psycopg://… also work).</p></li>
-<li><p>The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE
-(defaults: localhost, 5432, gradcafe, gradcafe).  PGHOST may also be a
-Unix-socket directory such as /var/run/postgresql.</p></li>
+SQLAlchemy spelling postgresql+psycopg://… also work).  When it is set it
+is used as it is, and nothing below is consulted.</p></li>
+<li><p>The project’s own DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD: how
+a deployment names its connection, e.g. the web app logging in as the
+least-privilege role that db_roles.py creates (see .env.example).</p></li>
+<li><p>The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE.</p></li>
+<li><p>The defaults: localhost, 5432, user gradcafe, database gradcafe.</p></li>
 </ol>
 </div></blockquote>
-<p>The password is best supplied by libpq itself, from ~/.pgpass (chmod 600) or
-the PGPASSWORD variable, so it never has to appear in a URL, a file in the
-repository, or a shell history.  Both psycopg (load_data.py, query_data.py)
-and SQLAlchemy’s psycopg driver (models.py) go through libpq, so the same
-settings serve every part of the project.</p>
+<p>Host, port, user and database name are looked up one at a time, so DB_HOST can
+be combined with PGUSER, and whatever is still missing falls back to its
+default.  A host may also be a Unix-socket directory such as /var/run/postgresql.</p>
+<p>DB_PASSWORD, when it is set, is handed to libpq inside the connection string;
+it is never printed, and describe_target() leaves it out.  Without it, libpq
+finds the password on its own, in ~/.pgpass (chmod 600) or PGPASSWORD, so it
+never has to appear in a URL, a file in the repository, or a shell history.
+Both psycopg (load_data.py, query_data.py) and SQLAlchemy’s psycopg driver
+(models.py) go through libpq, so the same settings serve every part of the
+project.</p>
+<p>The command-line tools that talk to PostgreSQL through psycopg
+(query_data.py, build_query_results.py, db_roles.py) open their connection with
+run_with_connection(), so they report an unusable setting, an unreachable
+server and a failed query with the same messages and exit codes.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="db_config.get_database_url">
 <span class="sig-prename descclassname"><span class="pre">db_config.</span></span><span class="sig-name descname"><span class="pre">get_database_url</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/db_config.html#get_database_url"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#db_config.get_database_url" title="Link to this definition"></a></dt>
-<dd><p>Connection string for psycopg: DATABASE_URL (URL or key=value), else a key=value DSN from PG* variables.</p>
+<dd><p>Connection string for psycopg.</p>
+<p>DATABASE_URL (a URL or a key=value string) when it is set, else a key=value
+DSN built from the DB_* and PG* variables.  The result can hold DB_PASSWORD,
+so it is handed to libpq and never printed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>str</p>
@@ -186,19 +204,45 @@ settings serve every part of the project.</p>
 <dd><p>The same connection as a sqlalchemy.engine.URL that selects the psycopg (v3) driver.</p>
 <p>The settings are parsed by psycopg’s own libpq-compatible parser and rebuilt
 field by field, so URLs, key=value strings, Unix-socket directories and IPv6
-hosts all work, and extra options such as sslmode are kept.  A non-numeric
+hosts all work, extra options such as sslmode are kept, and a DB_PASSWORD
+travels along (SQLAlchemy masks it as <code class="docutils literal notranslate"><span class="pre">***</span></code> whenever the URL is printed).  A non-numeric
 port is passed through unchanged so libpq rejects it when connecting, with
 the same connection error the psycopg scripts report.  Raises
 psycopg.ProgrammingError if the settings cannot be parsed at all.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>URL</em></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="db_config.describe_target">
 <span class="sig-prename descclassname"><span class="pre">db_config.</span></span><span class="sig-name descname"><span class="pre">describe_target</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/db_config.html#describe_target"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#db_config.describe_target" title="Link to this definition"></a></dt>
-<dd><p><code class="docutils literal notranslate"><span class="pre">user&#64;host:port/dbname</span></code> for messages; never raises and never shows a password or the raw setting.</p>
+<dd><p><code class="docutils literal notranslate"><span class="pre">user&#64;host:port/dbname</span></code> for messages.</p>
+<p>Never raises, and never shows a password or the raw setting.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="db_config.run_with_connection">
+<span class="sig-prename descclassname"><span class="pre">db_config.</span></span><span class="sig-name descname"><span class="pre">run_with_connection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">work</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/db_config.html#run_with_connection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#db_config.run_with_connection" title="Link to this definition"></a></dt>
+<dd><p>Run <code class="docutils literal notranslate"><span class="pre">work(conn)</span></code> on a new psycopg connection, for a command-line tool.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">result)</span></code> when everything worked.  Otherwise the reason is
+printed to stderr and the pair is <code class="docutils literal notranslate"><span class="pre">(exit</span> <span class="pre">code,</span> <span class="pre">None)</span></code>: 2 when the
+settings cannot be parsed (they are never echoed) or the server cannot be
+reached, 3 when a query fails.  The connection commits if <em>work</em> returns,
+rolls back if it raises, and is closed either way.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>work</strong> (<em>Callable</em><em>[</em><em>[</em><em>Connection</em><em>]</em><em>, </em><em>T</em><em>]</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[int, <em>T</em> | None]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -254,8 +298,8 @@ with SessionLocal() as session:
 <p>query_data.py (handwritten SQL) and orm_queries.py (SQLAlchemy) must answer
 the same questions in the same way, and the console, the PDF and the Flask page
 must format results identically.  Everything they have to agree on lives here:
-the question wording, the matching rules, the valid score ranges and the
-number formatting.</p>
+the question wording, the matching rules, the valid score ranges, the
+number formatting and the plain-text console layout.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="analysis_common.format_count">
 <span class="sig-prename descclassname"><span class="pre">analysis_common.</span></span><span class="sig-name descname"><span class="pre">format_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/analysis_common.html#format_count"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#analysis_common.format_count" title="Link to this definition"></a></dt>
@@ -299,6 +343,23 @@ number formatting.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="analysis_common.format_average_with_count">
+<span class="sig-prename descclassname"><span class="pre">analysis_common.</span></span><span class="sig-name descname"><span class="pre">format_average_with_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/analysis_common.html#format_average_with_count"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#analysis_common.format_average_with_count" title="Link to this definition"></a></dt>
+<dd><p>An average and how many values it is based on: ‘3.77 (n = 18,287)’.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<em>object</em>)</p></li>
+<li><p><strong>count</strong> (<em>object</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="analysis_common.format_difference">
 <span class="sig-prename descclassname"><span class="pre">analysis_common.</span></span><span class="sig-name descname"><span class="pre">format_difference</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/analysis_common.html#format_difference"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#analysis_common.format_difference" title="Link to this definition"></a></dt>
 <dd><p>Signed whole number: 3 -&gt; ‘+3’, -2 -&gt; ‘-2’, 0 -&gt; ‘0’.</p>
@@ -325,6 +386,25 @@ number formatting.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>list[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="analysis_common.print_answers">
+<span class="sig-prename descclassname"><span class="pre">analysis_common.</span></span><span class="sig-name descname"><span class="pre">print_answers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">answers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/analysis_common.html#print_answers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#analysis_common.print_answers" title="Link to this definition"></a></dt>
+<dd><p>Print answers as plain text under a title (the console output of both analyses).</p>
+<p>Each answer is a query_data.Answer or an orm_queries.OrmAnswer: anything with
+<code class="docutils literal notranslate"><span class="pre">number</span></code>, <code class="docutils literal notranslate"><span class="pre">question</span></code>, <code class="docutils literal notranslate"><span class="pre">lines</span></code>, <code class="docutils literal notranslate"><span class="pre">columns</span></code> and <code class="docutils literal notranslate"><span class="pre">table</span></code> attributes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>answers</strong> (<em>Iterable</em><em>[</em><em>Any</em><em>]</em>)</p></li>
+<li><p><strong>title</strong> (<em>str</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
 </dd>
 </dl>
 </dd></dl>
@@ -359,6 +439,20 @@ query_results.pdf, so the PDF always shows exactly what this file runs.</p>
 <li><p><strong>columns</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>)</p></li>
 <li><p><strong>table</strong> (<em>list</em><em>[</em><em>list</em><em>[</em><em>str</em><em>]</em><em>]</em>)</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="query_data.statement_params">
+<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">statement_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">number</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#statement_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.statement_params" title="Link to this definition"></a></dt>
+<dd><p>The values bound to question <em>number</em>’s placeholders (the LIMIT is clamped).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>number</strong> (<em>str</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, object]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -532,26 +626,11 @@ query_results.pdf, so the PDF always shows exactly what this file runs.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="query_data.print_answers">
-<span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">print_answers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">answers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#print_answers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.print_answers" title="Link to this definition"></a></dt>
-<dd><p>Print answers as plain text under a title (the console output of this module).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>answers</strong> (<em>list</em><em>[</em><a class="reference internal" href="#query_data.Answer" title="query_data.Answer"><em>Answer</em></a><em>]</em>)</p></li>
-<li><p><strong>title</strong> (<em>str</em>)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>None</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="query_data.main">
 <span class="sig-prename descclassname"><span class="pre">query_data.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/query_data.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#query_data.main" title="Link to this definition"></a></dt>
-<dd><p>Console entry point: print all eleven answers; returns 0, 2 (cannot connect) or 3 (query failed).</p>
+<dd><p>Console entry point: print all eleven answers.</p>
+<p>Returns the exit code: 0, 2 (cannot connect) or 3 (query failed); the
+connection and its error messages are handled by db_config.run_with_connection.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>int</p>
@@ -609,7 +688,8 @@ python orm_queries.py --all    # all eleven questions (what the Flask page shows
 <dl class="py function">
 <dt class="sig sig-object py" id="orm_queries.q2_percent_international">
 <span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q2_percent_international</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q2_percent_international"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q2_percent_international" title="Link to this definition"></a></dt>
-<dd><p>Question 2: (international, classified, percent international) among entries with a nationality.</p>
+<dd><p>Question 2: (international, classified, percent international).</p>
+<p>Only entries that provide a nationality classification are counted.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
@@ -623,7 +703,8 @@ python orm_queries.py --all    # all eleven questions (what the Flask page shows
 <dl class="py function">
 <dt class="sig sig-object py" id="orm_queries.q3_average_scores">
 <span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q3_average_scores</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q3_average_scores"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q3_average_scores" title="Link to this definition"></a></dt>
-<dd><p>Question 3: {metric: (average on the official scale, number of values)} for GPA and the GRE scores.</p>
+<dd><p>Question 3: GPA and the three GRE scores.</p>
+<p>Returns {metric: (average on the official scale, number of values)}.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
@@ -693,7 +774,7 @@ python orm_queries.py --all    # all eleven questions (what the Flask page shows
 <dl class="py function">
 <dt class="sig sig-object py" id="orm_queries.q8_accepted_cs_phd_original">
 <span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q8_accepted_cs_phd_original</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q8_accepted_cs_phd_original"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q8_accepted_cs_phd_original" title="Link to this definition"></a></dt>
-<dd><p>Question 8: accepted Fall 2026 CS PhD entries at the four schools, from the original fields.</p>
+<dd><p>Question 8: accepted Fall 2026 CS PhD entries at the four schools (original fields).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
@@ -721,7 +802,8 @@ python orm_queries.py --all    # all eleven questions (what the Flask page shows
 <dl class="py function">
 <dt class="sig sig-object py" id="orm_queries.q10_degree_comparison">
 <span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q10_degree_comparison</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q10_degree_comparison"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q10_degree_comparison" title="Link to this definition"></a></dt>
-<dd><p>Question 10: (degree, entries, acceptances, percent, average accepted GPA) per degree with 100+ Fall 2026 entries.</p>
+<dd><p>Question 10: acceptance rate and accepted GPA per degree with 100+ Fall 2026 entries.</p>
+<p>Returns (degree, entries, acceptances, percent, average accepted GPA) rows.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
@@ -735,7 +817,8 @@ python orm_queries.py --all    # all eleven questions (what the Flask page shows
 <dl class="py function">
 <dt class="sig sig-object py" id="orm_queries.q11_top_universities">
 <span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">q11_top_universities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#q11_top_universities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.q11_top_universities" title="Link to this definition"></a></dt>
-<dd><p>Question 11: (university, entries, acceptances, percent) for the ten LLM-named schools with the most Fall 2026 entries.</p>
+<dd><p>Question 11: the ten LLM-named schools with the most Fall 2026 entries.</p>
+<p>Returns (university, entries, acceptances, percent accepted) rows.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>session</strong> (<em>Session</em>)</p>
@@ -791,7 +874,8 @@ python orm_queries.py --all    # all eleven questions (what the Flask page shows
 <dl class="py function">
 <dt class="sig sig-object py" id="orm_queries.main">
 <span class="sig-prename descclassname"><span class="pre">orm_queries.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/orm_queries.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#orm_queries.main" title="Link to this definition"></a></dt>
-<dd><p>Console entry point: print the required ORM questions (all eleven with <code class="docutils literal notranslate"><span class="pre">--all</span></code>); returns the exit code.</p>
+<dd><p>Console entry point: print the required ORM questions (all eleven with <code class="docutils literal notranslate"><span class="pre">--all</span></code>).</p>
+<p>Returns the exit code: 0, 2 (cannot connect) or 3 (query failed).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>)</p>
@@ -812,7 +896,8 @@ HTML report with, for each question: the question in words, the result, the
 exact SQL that query_data.py executes, and an explanation.  Print the HTML to
 PDF with any browser (File &gt; Print &gt; Save as PDF), or headless Chrome:</p>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python build_query_results.py
-google-chrome --headless --no-pdf-header-footer --print-to-pdf=query_results.pdf query_results.html
+google-chrome --headless --no-pdf-header-footer \
+    --print-to-pdf=query_results.pdf query_results.html
 </pre></div>
 </div>
 <dl class="py function">

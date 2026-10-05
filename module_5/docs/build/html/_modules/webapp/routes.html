@@ -88,15 +88,36 @@ Endpoints::
     GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
     POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
     POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
+    GET  /api/applicants   filtered, sorted, LIMITed rows as JSON (see applicant_search.py)
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from http.client import HTTPException
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, url_for
+import psycopg
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
+from sqlalchemy.exc import SQLAlchemyError
+
+from applicant_search import SearchError, parse_search_args
 
 bp = Blueprint("analysis", __name__)
+
+# The failures a query or a pull can really raise: database errors from either
+# driver layer (psycopg directly, or wrapped by SQLAlchemy), OSError
+# (ConnectionError, PermissionError, urllib's URLError), HTTPException (a
+# response cut off mid-body), RuntimeError (the scraper's ScrapeBlockedError /
+# ScrapeNetworkError / ScrapeStateError) and ValueError (malformed data).
+# Anything else is a programming error and should surface as one.
+EXPECTED_FAILURES = (
+    psycopg.Error,
+    SQLAlchemyError,
+    OSError,
+    HTTPException,
+    RuntimeError,
+    ValueError,
+)
 
 
 <div class="viewcode-block" id="root">
@@ -116,7 +137,7 @@ def index():
     analysis, error = None, None
     try:
         analysis = current_app.config["QUERY_FN"]()
-    except Exception as err:  # noqa: BLE001 - any query failure becomes a friendly banner, not a 500
+    except EXPECTED_FAILURES as err:  # a query failure becomes a friendly banner, not a 500
         error = ("The analysis could not be loaded because the database is not reachable. "
                  f"({err.__class__.__name__})")
     return render_template(
@@ -139,8 +160,9 @@ def pull_data():
     try:
         raw_entries = current_app.config["SCRAPE_FN"]()
         inserted = current_app.config["LOAD_FN"](raw_entries)
-    except Exception as err:  # noqa: BLE001 - report the failure; never crash the request
-        return jsonify(ok=False, error=str(err)), 500
+    except EXPECTED_FAILURES as err:  # never echo database or network details to the caller
+        current_app.logger.error("pull failed: %s", err.__class__.__name__)
+        return jsonify(ok=False, error="the pull could not be completed"), 500
     finally:
         current_app.pull_state.finish()
     return jsonify(ok=True, inserted=inserted), 200</div>
@@ -155,6 +177,25 @@ def update_analysis():
     if current_app.pull_state.is_running:
         return jsonify(busy=True), 409
     return jsonify(ok=True), 200</div>
+
+
+
+<div class="viewcode-block" id="api_applicants">
+<a class="viewcode-back" href="../../api/web.html#webapp.routes.api_applicants">[docs]</a>
+@bp.get("/api/applicants")
+def api_applicants():
+    """Search stored applicants: ?term=&amp;status=&amp;degree=&amp;us_or_international=&amp;program=
+    &amp;sort=&amp;order=&amp;limit= .  Invalid parameters get 400; at most MAX_LIMIT rows come back."""
+    try:
+        search = parse_search_args(request.args)
+    except SearchError as err:
+        return jsonify(ok=False, error=str(err)), 400
+    try:
+        rows = current_app.config["SEARCH_FN"](search)
+    except EXPECTED_FAILURES as err:  # never echo database details to the caller
+        current_app.logger.error("search failed: %s", err.__class__.__name__)
+        return jsonify(ok=False, error="the search could not be completed"), 500
+    return jsonify(ok=True, limit=search.limit, count=len(rows), rows=rows), 200</div>
 
 </pre></div>
 

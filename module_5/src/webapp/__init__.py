@@ -1,5 +1,5 @@
 """
-webapp - Flask front end for the Grad Café analysis (Module 4).
+webapp - Flask front end for the Grad Café analysis (Module 5).
 
 create_app() is the application factory.  Every external dependency the
 routes need — the scraper, the loader, the analysis query — is injected as a

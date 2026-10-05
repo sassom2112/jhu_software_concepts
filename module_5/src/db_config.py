@@ -107,7 +107,7 @@ def get_sqlalchemy_url() -> URL:
     The settings are parsed by psycopg's own libpq-compatible parser and rebuilt
     field by field, so URLs, key=value strings, Unix-socket directories and IPv6
     hosts all work, extra options such as sslmode are kept, and a DB_PASSWORD
-    travels along (SQLAlchemy masks it as *** whenever the URL is printed).  A non-numeric
+    travels along (SQLAlchemy masks it as ``***`` whenever the URL is printed).  A non-numeric
     port is passed through unchanged so libpq rejects it when connecting, with
     the same connection error the psycopg scripts report.  Raises
     psycopg.ProgrammingError if the settings cannot be parsed at all.

@@ -49,7 +49,7 @@ from db_config import (CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_
 from jsonio import load_data as load_json  # Module 2 JSON reader (plain or .gz)
 from query_limits import MAX_LIMIT, clamp_limit
 
-# The module folder (module_4/, the parent of src/): the command line reads and writes its
+# The module folder (module_5/, the parent of src/): the command line reads and writes its
 # data files there, next to src/ rather than inside it, as in Modules 2 and 3.
 HERE = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT = "llm_extend_applicant_data.json"
@@ -103,6 +103,7 @@ CREATE_TABLE_STATEMENT = sql.SQL("CREATE TABLE IF NOT EXISTS {table} ({columns})
         for name, sql_type in COLUMN_TYPES
     ),
 )
+DROP_TABLE_STATEMENT = sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(TABLE_NAME))
 _COLUMN_LIST = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
 _NAMES = {
     "table": sql.Identifier(TABLE_NAME),
@@ -220,7 +221,7 @@ def create_table(conn: psycopg.Connection, reset: bool = False) -> None:
     """Create the applicants table (optionally dropping it first)."""
     with conn.cursor() as cur:
         if reset:
-            cur.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(TABLE_NAME)))
+            cur.execute(DROP_TABLE_STATEMENT)
         cur.execute(CREATE_TABLE_STATEMENT)
 
 

@@ -1,5 +1,5 @@
 """
-conftest.py - fixtures share by every test file in this folder.
+conftest.py - fixtures shared by every test file in this folder.
 
 pytest find this file automatically (w/ no import needed anywhere else) and 
 makes every function decorated with @pytest.fixture available to any test 
@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 from psycopg.conninfo import conninfo_to_dict
 
-# module_4/src is not an installled package, so tell Pyhton where to find it.
-# This is relative to THIS  file, so it works no matter what dir you run pytest from
+# Put module_5/src on sys.path, so the tests also run without `pip install -e .`.
+# The path is relative to THIS file, so it works from any directory.
 SRC = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(SRC))
 
