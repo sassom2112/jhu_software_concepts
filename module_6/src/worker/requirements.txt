@@ -1,0 +1,22 @@
+# The worker image's packages (src/worker/Dockerfile, also used by the one-shot init
+# service): the complete closure, every version pinned exactly and the same as in
+# module_6/requirements.txt.  The Dockerfile installs this list with --no-deps and then
+# runs `pip check`, so nothing unlisted can slip in.  No Flask: the worker serves no pages.
+
+# PostgreSQL: psycopg 3 with its compiled driver (consumer, bootstrap, analytics, loader)
+psycopg==3.3.6
+psycopg-binary==3.3.6
+typing_extensions==4.16.0
+
+# RabbitMQ: the consumer (no dependencies of its own)
+pika==1.4.4
+
+# Scraper: HTML parsing for the scrape_new_data task
+beautifulsoup4==4.15.0
+soupsieve==2.9.2
+lxml==6.1.3
+
+# SQLAlchemy: worker/etl/orm_queries.py, the ORM version of the analysis, so every module
+# of the worker package can run in the image (python -m worker.etl.orm_queries)
+SQLAlchemy==2.0.54
+greenlet==3.5.6

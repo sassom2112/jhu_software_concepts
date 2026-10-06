@@ -1,0 +1,144 @@
+# Grad Cafe analysis as a small microservice stack:
+#
+#   db        PostgreSQL 17; its data lives in the named volume pgdata
+#   rabbitmq  the message broker (durable exchange "tasks" -> durable queue "tasks_q")
+#   init      one-shot: python -m worker.bootstrap creates the tables and the two service
+#             roles, loads src/data/applicant_data.json and computes the first analysis
+#   web       the Flask page on port 8080; its buttons only queue tasks (HTTP 202)
+#   worker    consumes the tasks one at a time (prefetch 1), one transaction each
+#
+# Usage, in module_6/:
+#   cp .env.example .env          # then replace every change-me (passwords: letters,
+#                                 # digits, - and _ only; they go into connection URLs)
+#   docker compose up --build     # page: http://localhost:8080
+#                                 # RabbitMQ UI: http://localhost:15672 (RABBITMQ_DEFAULT_USER)
+#   docker compose down           # stop; the data stays in the named volumes
+#   docker compose down -v        # stop and delete the data too
+#
+# Every secret comes from module_6/.env (git-ignored): ${NAME:?...} stops Compose with that
+# message when one is missing, instead of starting with an empty password.  All services
+# share the project's default network, a private bridge network: only the two ports below
+# are published, and only on 127.0.0.1.  PostgreSQL is not published at all.
+
+# Settings shared by several services (YAML anchors, merged in with <<).
+x-worker-image: &worker-image
+  image: frametotoro/module_6:worker-v1
+  build:
+    context: ./src                 # module_6/src, so the image can COPY the shared db/ package
+    dockerfile: worker/Dockerfile
+
+x-hardened: &hardened
+  read_only: true                  # the code cannot be changed in a running container...
+  tmpfs:
+    - /tmp                         # ...the one writable place (the scraper's files go here)
+  cap_drop: [ALL]                  # no Linux capabilities: nothing here needs root powers
+  security_opt:
+    - "no-new-privileges:true"
+  init: true                       # a tiny init process forwards docker stop's SIGTERM
+
+x-rabbitmq-url: &rabbitmq-url "amqp://${RABBITMQ_DEFAULT_USER:?set RABBITMQ_DEFAULT_USER in module_6/.env (see .env.example)}:${RABBITMQ_DEFAULT_PASS:?set RABBITMQ_DEFAULT_PASS in module_6/.env (see .env.example)}@rabbitmq:5672/"
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: gradcafe      # the administrator: owns the tables, used only by init
+      POSTGRES_DB: gradcafe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in module_6/.env (see .env.example)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Over TCP: during its first start PostgreSQL runs a temporary server on the Unix
+      # socket only, which must not count as ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gradcafe -d gradcafe"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    hostname: rabbitmq             # RabbitMQ keeps its data under its node name, rabbit@<host name>
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?set RABBITMQ_DEFAULT_USER in module_6/.env (see .env.example)}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?set RABBITMQ_DEFAULT_PASS in module_6/.env (see .env.example)}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq   # durable queues and persistent messages survive a restart
+    ports:
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"   # management UI; AMQP (5672) stays private
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  init:
+    <<: [*worker-image, *hardened]
+    command: ["python", "-m", "worker.bootstrap"]
+    environment:
+      # The table owner: creating tables and roles needs it.  Nothing else logs in as it.
+      DATABASE_URL: postgresql://gradcafe:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in module_6/.env (see .env.example)}@db:5432/gradcafe
+      WEB_DB_USER: ${WEB_DB_USER:-gradcafe_web}
+      WEB_DB_PASSWORD: ${WEB_DB_PASSWORD:?set WEB_DB_PASSWORD in module_6/.env (see .env.example)}
+      WORKER_DB_USER: ${WORKER_DB_USER:-gradcafe_worker}
+      WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?set WORKER_DB_PASSWORD in module_6/.env (see .env.example)}
+    volumes:
+      - ./src/data:/app/data:ro    # applicant_data.json, read-only
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"                  # runs once per `up`; running it again is harmless
+
+  web:
+    <<: *hardened
+    image: frametotoro/module_6:web-v1
+    build:
+      context: ./src
+      dockerfile: web/Dockerfile
+    environment:
+      # The read-only web role: SELECT on applicants and analysis_snapshot, nothing else.
+      DATABASE_URL: postgresql://${WEB_DB_USER:-gradcafe_web}:${WEB_DB_PASSWORD:?set WEB_DB_PASSWORD in module_6/.env (see .env.example)}@db:5432/gradcafe
+      RABBITMQ_URL: *rabbitmq-url
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      # GET /healthz answers "ok" without touching the database.
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    <<: [*worker-image, *hardened]
+    environment:
+      # The worker role: SELECT and INSERT on applicants, UPSERTs on its two bookkeeping tables.
+      DATABASE_URL: postgresql://${WORKER_DB_USER:-gradcafe_worker}:${WORKER_DB_PASSWORD:?set WORKER_DB_PASSWORD in module_6/.env (see .env.example)}@db:5432/gradcafe
+      RABBITMQ_URL: *rabbitmq-url
+      SCRAPE_DATA_DIR: /tmp/gradcafe_scrape
+    volumes:
+      - ./src/data:/app/data:ro    # the applicant data, read-only
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    restart: unless-stopped        # a lost broker connection ends the process; Docker restarts it
+
+volumes:
+  pgdata:          # PostgreSQL's data directory: survives `docker compose down`
+  rabbitmq_data:   # RabbitMQ's queues and persistent messages

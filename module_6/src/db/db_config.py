@@ -11,8 +11,9 @@ environment variables, in this order of preference:
      SQLAlchemy spelling postgresql+psycopg://... also work).  When it is set it
      is used as it is, and nothing below is consulted.
   2. The project's own DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD: how
-     a deployment names its connection, e.g. the web app logging in as the
-     least-privilege role that db_roles.py creates (see .env.example).
+     a deployment names its connection, e.g. the web or worker service logging
+     in as the least-privilege role that db_roles.py creates for it (see
+     .env.example).
   3. The standard libpq variables PGHOST, PGPORT, PGUSER, PGDATABASE.
   4. The defaults: localhost, 5432, user gradcafe, database gradcafe.
 
@@ -25,8 +26,9 @@ it is never printed, and describe_target() leaves it out.  Without it, libpq
 finds the password on its own, in ~/.pgpass (chmod 600) or PGPASSWORD, so it
 never has to appear in a URL, a file in the repository, or a shell history.
 Both psycopg (load_data.py, query_data.py) and SQLAlchemy's psycopg driver
-(models.py) go through libpq, so the same settings serve every part of the
-project.
+(worker/etl/models.py, which builds its URL from get_database_url()) go through
+libpq, so the same settings serve every part of the project.  This module does
+not import SQLAlchemy: the web image installs only Flask, psycopg and pika.
 
 The command-line tools that talk to PostgreSQL through psycopg
 (query_data.py, build_query_results.py, db_roles.py) open their connection with
@@ -44,7 +46,6 @@ from typing import TypeVar
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
-from sqlalchemy.engine import URL
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = "5432"
@@ -52,7 +53,10 @@ DEFAULT_USER = "gradcafe"
 DEFAULT_DATABASE = "gradcafe"
 CONNECT_TIMEOUT_SECONDS = 10
 
-TABLE_NAME = "applicants"
+# The three tables of the schema (load_data.create_schema creates them):
+TABLE_NAME = "applicants"                  # one row per Grad Cafe entry
+WATERMARK_TABLE = "ingestion_watermarks"   # how far each source has been read
+SNAPSHOT_TABLE = "analysis_snapshot"       # the analysis the web page shows
 
 INVALID_SETTINGS_MESSAGE = (
     "error: the database connection settings are not valid; check DATABASE_URL, "
@@ -99,36 +103,6 @@ def get_database_url() -> str:
     if url:
         return _DRIVER_SUFFIX.sub(r"\1://", url, count=1)
     return make_conninfo(**_settings())
-
-
-def get_sqlalchemy_url() -> URL:
-    """The same connection as a sqlalchemy.engine.URL that selects the psycopg (v3) driver.
-
-    The settings are parsed by psycopg's own libpq-compatible parser and rebuilt
-    field by field, so URLs, key=value strings, Unix-socket directories and IPv6
-    hosts all work, extra options such as sslmode are kept, and a DB_PASSWORD
-    travels along (SQLAlchemy masks it as ``***`` whenever the URL is printed).  A non-numeric
-    port is passed through unchanged so libpq rejects it when connecting, with
-    the same connection error the psycopg scripts report.  Raises
-    psycopg.ProgrammingError if the settings cannot be parsed at all.
-    """
-    params = dict(conninfo_to_dict(get_database_url()))
-    user = params.pop("user", None)
-    password = params.pop("password", None)
-    host = params.pop("host", None)
-    dbname = params.pop("dbname", None)
-    port = str(params.pop("port", "") or "")
-    if port and not port.isdigit():
-        params["port"] = port
-    return URL.create(
-        "postgresql+psycopg",
-        username=user,
-        password=password,
-        host=host,
-        port=int(port) if port.isdigit() else None,
-        database=dbname,
-        query=params,
-    )
 
 
 def describe_target() -> str:

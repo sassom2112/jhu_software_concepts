@@ -1,0 +1,7 @@
+# The build context of both images is module_6/src (so each can COPY the shared db/
+# package).  Keep out what no image needs: the 36 MB data file (the stack mounts
+# src/data read-only instead), packaging output and Python caches.
+data/
+*.egg-info/
+**/__pycache__/
+**/*.pyc

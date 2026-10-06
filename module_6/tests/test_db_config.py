@@ -10,7 +10,8 @@ from __future__ import annotations
 import pytest
 from psycopg.conninfo import conninfo_to_dict
 
-from db.db_config import describe_target, get_database_url, get_sqlalchemy_url
+from db.db_config import describe_target, get_database_url
+from worker.etl.models import get_sqlalchemy_url   # SQLAlchemy lives in the worker only
 
 pytestmark = pytest.mark.db          # marks every test in this file
 

@@ -24,11 +24,11 @@ sys.path.insert(0, str(SRC))
 
 from web.app import create_app      # noqa: E402 (must come after the sys.path fix above)
 from db.db_config import get_database_url   # noqa: E402
-from db.load_data import connect, create_table   # noqa: E402
+from db.load_data import connect, create_schema   # noqa: E402
 from worker.etl.scrape import GradCafeScraper   # noqa: E402
 from fake_gradcafe import FakeSite   # noqa: E402  (tests/fake_gradcafe.py)
 
-# A realistic-shaped fake for QUERY_FN: same structure orm_queries.get_analysis()
+# A realistic-shaped fake for QUERY_FN: same structure db.snapshot.load_snapshot()
 # returns in the real app, so templates render exactly the way they would with
 # a real db behind them; only instantly and offline.
 FAKE_ANALYSIS = {
@@ -51,45 +51,37 @@ FAKE_ANALYSIS = {
     ],
 }
 
-class FakeScraper:
-    """Stands in for SCRAPE_FN: returns canned rows and remembers how often it was called"""
+class FakePublisher:
+    """Stands in for PUBLISH_FN: remembers every task it was asked to queue instead of talking to RabbitMQ.
 
-    def __init__(self, rows: list[dict] | None = None) -> None:
-        self.rows = rows if rows is not None else []
-        self.calls = 0
-
-    def __call__(self) -> list[dict]:
-        self.calls += 1
-        return self.rows
-
-    
-class FakeLoader:
-    """Stands in for LOAD_FN: remembers every batch it was asked to 'insert' instead of touching PostgreSQL."""
+    Set .error to an exception and every call raises it, the way publisher.publish_task
+    does when the broker is down."""
 
     def __init__(self) -> None:
-        self.calls: list[list[dict]] = []
+        self.calls: list[tuple] = []
+        self.error: Exception | None = None
 
-    def __call__(self, rows: list[dict]) -> int:
-        self.calls.append(rows)
-        return len(rows)
+    def __call__(self, kind: str, payload: dict | None = None, headers: dict | None = None) -> None:
+        if self.error is not None:
+            raise self.error
+        self.calls.append((kind, payload, headers))
 
-
-@pytest.fixture
-def fake_scraper() -> FakeScraper:
-    """A fresh, empty fake scraper for each test (override .rows in the test body if you need data)."""
-    return FakeScraper()
-
-
-@pytest.fixture
-def fake_loader() -> FakeLoader:
-    """A fresh fake loader for each test."""
-    return FakeLoader()
+    @property
+    def kinds(self) -> list[str]:
+        """Just the task kinds, in the order they were queued."""
+        return [kind for kind, _payload, _headers in self.calls]
 
 
 @pytest.fixture
-def app(fake_scraper, fake_loader):
-    """A Flask app wired entirely to fakes: no network call and no database write is possible here."""
-    return create_app(scrape_fn=fake_scraper, load_fn=fake_loader, query_fn=lambda: FAKE_ANALYSIS)
+def fake_publisher() -> FakePublisher:
+    """A fresh fake publisher for each test."""
+    return FakePublisher()
+
+
+@pytest.fixture
+def app(fake_publisher):
+    """A Flask app wired entirely to fakes: no RabbitMQ and no database is needed here."""
+    return create_app(publish_fn=fake_publisher, query_fn=lambda: FAKE_ANALYSIS)
 
 
 @pytest.fixture
@@ -102,12 +94,15 @@ def client(app):
 #        Environment: a developer's own database settings never leak in       #
 # --------------------------------------------------------------------------- #
 
-# The web app's DB_* settings and db_roles.py's APP_DB_* settings (see
-# .env.example).  Anyone who has sourced their .env has them set, and they
-# could change who the tests log in as.  The tests connect through
-# DATABASE_URL only, so these are removed before anything else runs.
+# The services' DB_* settings, db_roles.py's WEB_DB_* and WORKER_DB_* settings,
+# the broker's RABBITMQ_URL and the worker scraper's SCRAPE_DATA_DIR (see
+# .env.example).  Anyone who has sourced their .env has them set, and they could
+# change who the tests log in as, where a task goes or where files are written.
+# The tests connect through DATABASE_URL only, so these are removed before
+# anything else runs.
 DEVELOPER_SETTINGS = ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD",
-                      "APP_DB_USER", "APP_DB_PASSWORD")
+                      "WEB_DB_USER", "WEB_DB_PASSWORD", "WORKER_DB_USER", "WORKER_DB_PASSWORD",
+                      "RABBITMQ_URL", "SCRAPE_DATA_DIR")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -181,19 +176,20 @@ def database_url() -> str:
 
 @pytest.fixture
 def db_conn(database_url):
-    """An autocommit connection to an EMPTY applicants table in the test database."""
+    """An autocommit connection to the test database with EMPTY tables: no applicants,
+    no watermark and no analysis snapshot."""
     conn = connect()
     conn.autocommit = True
-    create_table(conn)
-    conn.execute("TRUNCATE applicants")
+    create_schema(conn)
+    conn.execute("TRUNCATE applicants, ingestion_watermarks, analysis_snapshot")
     yield conn
     conn.close()
 
 
 @pytest.fixture
-def db_app(db_conn, fake_scraper):
-    """The REAL loader and REAL queries against the test database; only the scraper is fake."""
-    return create_app(scrape_fn=fake_scraper)
+def db_app(db_conn, fake_publisher):
+    """The REAL page, status and search queries against the test database; only RabbitMQ is fake."""
+    return create_app(publish_fn=fake_publisher)
 
 
 @pytest.fixture
@@ -221,3 +217,14 @@ def fake_site(monkeypatch):
     monkeypatch.setattr(time, "sleep", site.sleeps.append)
     return site
 
+
+@pytest.fixture
+def worker_site(fake_site, tmp_path, monkeypatch):
+    """fake_site for the worker's Pull Data task.
+
+    The worker's scraper keeps its files (the robots.txt it obeyed) in
+    SCRAPE_DATA_DIR, which points at a temporary folder here.  Serve the
+    listing with worker_site.serve_listing([[newest ids], [older ids], ...]).
+    """
+    monkeypatch.setenv("SCRAPE_DATA_DIR", str(tmp_path / "scrape"))
+    return fake_site

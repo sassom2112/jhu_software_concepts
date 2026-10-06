@@ -1,27 +1,73 @@
 """
 test_integration_end_to_end.py - The whole app, start to finish.
 
-Pull Data -> Update Analysis -> the analysis page, with only the scraper
-faked.  The loader writes to the *_test database and the page is computed by
-the real SQLAlchemy queries (orm_queries.get_analysis), so these tests show
-the pieces work together, not just one at a time.
+Click -> queued message -> the worker -> stored snapshot -> the page.  Only
+RabbitMQ and Grad Café are faked.  The buttons publish through the real
+web/publisher.publish_task, whose broker connection is the FakeBroker of
+test_publisher.py: it keeps every message body that would have gone over the
+wire.  Stack.run_worker() then hands those exact bytes, in the order they were
+queued, to the real worker (worker/consumer.Worker.process_message), which
+runs each task in one transaction on the *_test database and acks it.  The
+scraper reads the fake Grad Café (worker_site), and the page reads the stored
+snapshot back through the real default QUERY_FN.  So these tests show the
+pieces work together, not one at a time.
 """
 
 from __future__ import annotations
+
+import json
 
 import pytest
 from bs4 import BeautifulSoup
 
 from db.load_data import fetch_applicants
+from fake_gradcafe import ROBOTS_TXT, ROBOTS_URL, applicant, listing_page, page, survey_url
+from test_consumer import Answers, delivery
+from test_publisher import broker  # noqa: F401  (fixture: publish_task's fake RabbitMQ)
+from web.app import create_app
+from worker.consumer import Worker
+from worker.etl.ingest import insert_scraped_entries
 
 
-def fall_2026_applicant(entry_factory, result_id, citizenship, gpa, decision):
-    """A Fall 2026 scraper entry carrying the fields the analysis questions count."""
-    return entry_factory(
-        result_id,
-        tags_text=["Fall 2026", citizenship, f"GPA {gpa}"],
-        decision_text=f"{decision} on Sep 18",
-    )
+class Stack:
+    """The web app with all its real defaults, and the worker behind the fake broker."""
+
+    def __init__(self, client, fake_broker) -> None:
+        self.client = client
+        self.broker = fake_broker
+        self.channel = Answers()            # records the worker's ack / nack of each message
+        self.delivered = 0
+
+    def messages(self) -> list[bytes]:
+        """Every message body the buttons have published so far, in order."""
+        return [connection.fake_channel.published()["body"] for connection in self.broker.connections]
+
+    def kinds(self) -> list[str]:
+        return [json.loads(raw)["kind"] for raw in self.messages()]
+
+    def run_worker(self) -> None:
+        """Deliver every message not delivered yet to the worker, one at a time."""
+        worker = Worker()
+        for raw in self.messages()[self.delivered:]:
+            self.delivered += 1
+            worker.process_message(self.channel, delivery(self.delivered), None, raw)
+
+
+@pytest.fixture
+def stack(db_conn, broker, worker_site):  # noqa: F811  (broker is the imported fixture)
+    return Stack(create_app().test_client(), broker)
+
+
+def fall_2026_applicant(result_id, citizenship, gpa, decision) -> dict:
+    """A Fall 2026 listing row carrying the fields the analysis questions count."""
+    return applicant(result_id, tags=["Fall 2026", citizenship, f"GPA {gpa}"],
+                     decision=f"{decision} on Sep 18")
+
+
+def serve_listing(site, rows: list[dict]) -> None:
+    """Grad Café's first listing page shows *rows* (newest first), and nothing follows it."""
+    site.serve(ROBOTS_URL, page(ROBOTS_TXT))
+    site.serve(survey_url(), page(listing_page(rows)))
 
 
 def page_results(response) -> dict[tuple[str, str], str]:
@@ -37,36 +83,38 @@ def page_results(response) -> dict[tuple[str, str], str]:
     return results
 
 
-def entries_shown(response) -> str:
-    """The "entries in the database" number at the top of the page."""
-    soup = BeautifulSoup(response.data, "html.parser")
-    return soup.select_one(".stat-value").get_text(strip=True)
+def entries_shown(response) -> str | None:
+    """The "entries in the database" number at the top of the page (None: no analysis yet)."""
+    stat = BeautifulSoup(response.data, "html.parser").select_one(".stat-value")
+    return stat.get_text(strip=True) if stat else None
 
 
-@pytest.fixture
-def first_batch(entry_factory):
-    return [
-        fall_2026_applicant(entry_factory, 9_100_001, "International", "3.90", "Accepted"),
-        fall_2026_applicant(entry_factory, 9_100_002, "American", "3.50", "Rejected"),
-        fall_2026_applicant(entry_factory, 9_100_003, "American", "3.70", "Accepted"),
-    ]
+FIRST_BATCH = [
+    fall_2026_applicant(9_100_003, "American", "3.70", "Accepted"),
+    fall_2026_applicant(9_100_002, "American", "3.50", "Rejected"),
+    fall_2026_applicant(9_100_001, "International", "3.90", "Accepted"),
+]
 
 
 @pytest.mark.integration
-def test_pull_update_render(db_client, fake_scraper, first_batch):
-    assert entries_shown(db_client.get("/analysis")) == "0"
+def test_pull_update_render(stack, worker_site):
+    before = stack.client.get("/analysis")
+    assert entries_shown(before) is None                 # nothing computed yet...
+    assert "No analysis has been computed yet" in before.get_data(as_text=True)
+    serve_listing(worker_site, FIRST_BATCH)
 
-    fake_scraper.rows = first_batch
-    pull = db_client.post("/pull-data")
-    update = db_client.post("/update-analysis")
-    page = db_client.get("/analysis")
+    pull = stack.client.post("/pull-data")
+    stack.run_worker()
+    update = stack.client.post("/update-analysis")
+    stack.run_worker()
+    after = stack.client.get("/analysis")
 
-    assert pull.status_code == 200
-    assert pull.get_json()["inserted"] == 3
-    assert update.status_code == 200
-    assert page.status_code == 200
-    assert entries_shown(page) == "3"
-    results = page_results(page)
+    assert (pull.status_code, update.status_code) == (202, 202)
+    assert stack.kinds() == ["scrape_new_data", "recompute_analytics"]
+    assert stack.channel.answers == [("ack", 1), ("ack", 2)]   # each acked after its commit
+    assert after.status_code == 200
+    assert entries_shown(after) == "3"
+    results = page_results(after)
     assert results[("1", "Fall 2026 applicant count")] == "3"
     assert results[("2", "Percent international")] == "33.33%"        # 1 of 3, two decimals
     assert results[("4", "Average GPA of American Fall 2026 applicants")] == "3.60"
@@ -74,40 +122,43 @@ def test_pull_update_render(db_client, fake_scraper, first_batch):
 
 
 @pytest.mark.integration
-def test_overlapping_pulls_keep_rows_unique(db_client, db_conn, fake_scraper, entry_factory, first_batch):
-    second_batch = first_batch[1:] + [
-        fall_2026_applicant(entry_factory, 9_100_004, "International", "3.80", "Accepted"),
-    ]
+def test_overlapping_pulls_keep_rows_unique(stack, db_conn, worker_site):
+    serve_listing(worker_site, FIRST_BATCH)
+    stack.client.post("/pull-data")
+    stack.run_worker()
+    # One new entry appeared above the three already stored.
+    newest = fall_2026_applicant(9_100_004, "International", "3.80", "Accepted")
+    serve_listing(worker_site, [newest] + FIRST_BATCH)
 
-    fake_scraper.rows = first_batch
-    first = db_client.post("/pull-data").get_json()
-    fake_scraper.rows = second_batch
-    second = db_client.post("/pull-data").get_json()
-    page = db_client.get("/analysis")
+    stack.client.post("/pull-data")
+    stack.run_worker()
+    after = stack.client.get("/analysis")                 # the pull refreshed the snapshot itself
 
-    assert first["inserted"] == 3
-    assert second["inserted"] == 1                  # the two repeats were skipped
     p_ids = [row["p_id"] for row in fetch_applicants(db_conn)]
     assert p_ids == [9_100_004, 9_100_003, 9_100_002, 9_100_001]
-    assert entries_shown(page) == "4"
-    assert page_results(page)[("2", "Percent international")] == "50.00%"     # 2 of 4
+    assert entries_shown(after) == "4"
+    assert page_results(after)[("2", "Percent international")] == "50.00%"     # 2 of 4
 
 
 @pytest.mark.integration
-def test_running_pull_blocks_both_buttons_until_it_finishes(db_client, fake_scraper, first_batch):
-    pull_state = db_client.application.pull_state
-    pull_state.try_start()                          # a pull is "in progress"
+def test_the_page_changes_only_when_the_worker_has_stored_a_new_snapshot(stack, db_conn, worker_site,
+                                                                          entry_factory):
+    serve_listing(worker_site, FIRST_BATCH[2:])
+    stack.client.post("/pull-data")
+    stack.run_worker()
+    first_status = stack.client.get("/api/analysis-status").get_json()
 
-    page = db_client.get("/analysis")
-    button = BeautifulSoup(page.data, "html.parser").find(attrs={"data-testid": "pull-data-btn"})
-    assert button.has_attr("disabled")
-    assert db_client.post("/update-analysis").status_code == 409
-    assert db_client.post("/pull-data").status_code == 409
-    assert fake_scraper.calls == 0
+    # Another transaction is still running: rows are in, the snapshot is not yet.
+    with db_conn.transaction():
+        insert_scraped_entries(db_conn, [entry_factory(9_100_002), entry_factory(9_100_003)])
+        assert entries_shown(stack.client.get("/analysis")) == "1"
+        assert stack.client.get("/api/analysis-status").get_json() == first_status
 
-    pull_state.finish()                             # ...and now it is done
+    stack.client.post("/update-analysis")
+    stack.run_worker()
+    second_status = stack.client.get("/api/analysis-status").get_json()
 
-    fake_scraper.rows = first_batch
-    assert db_client.post("/pull-data").status_code == 200
-    assert db_client.post("/update-analysis").status_code == 200
-    assert entries_shown(db_client.get("/analysis")) == "3"
+    assert first_status["total_entries"] == 1
+    assert second_status["total_entries"] == 3
+    assert second_status["computed_at"] > first_status["computed_at"]   # what the page's poll waits for
+    assert entries_shown(stack.client.get("/analysis")) == "3"

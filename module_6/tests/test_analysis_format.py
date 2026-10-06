@@ -60,8 +60,8 @@ def percentages_in(html: str) -> list[str]:
 
 @pytest.fixture
 def mixed_client():
-    """This app only ever serves GET /analysis, so the scraper and loader are harmless stubs."""
-    app = create_app(scrape_fn=lambda: [], load_fn=lambda rows: 0, query_fn=lambda: MIXED_ANALYSIS)
+    """This app only ever serves GET /analysis, so the publisher is a harmless stub."""
+    app = create_app(publish_fn=lambda kind: None, query_fn=lambda: MIXED_ANALYSIS)
     return app.test_client()
 
 

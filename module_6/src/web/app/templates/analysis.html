@@ -3,7 +3,7 @@
 <header class="topbar">
   <div class="topbar-inner">
     <div>
-      <p class="eyebrow">JHU EN.605.256 · Module 5</p>
+      <p class="eyebrow">JHU EN.605.256 · Module 6</p>
       <h1>Grad Café Data Analysis</h1>
     </div>
     <button type="button" class="button button-secondary" id="update-analysis-btn"
@@ -11,32 +11,38 @@
   </div>
 </header>
 
-<main class="page">
-  <div class="notice" id="action-message" role="status" hidden></div>
+<main class="page" id="analysis-page" data-computed-at="{{ computed_at_iso }}"
+      data-status-url="{{ url_for('analysis.analysis_status') }}">
+  <div class="notice" id="action-message" role="status" data-testid="action-message" hidden></div>
+  <div class="notice notice-error" id="action-error" data-testid="action-error" hidden></div>
 
   <section class="panel pull-panel">
     <div class="pull-text">
       <h2>Pull Data</h2>
-      <p>Pull Data checks Grad Café for entries newer than what is already stored, cleans them, and adds
-         them to the database. Existing records are never changed. If a pull is already running, clicking
-         Pull Data again does nothing until it finishes.</p>
+      <p>Pull Data asks the background worker to check Grad Café for entries newer than the last one it
+         has seen, clean them, and add them to the database. Update Analysis asks it to recompute the
+         results below. Each click queues a request and returns at once; the worker handles requests
+         one at a time, and this page reloads by itself when the updated analysis is ready.
+         Existing records are never changed.</p>
     </div>
     <button type="button" class="button button-primary" id="pull-data-btn"
-            data-testid="pull-data-btn" {% if pull_running %}disabled{% endif %}>
-      {% if pull_running %}Pulling…{% else %}Pull Data{% endif %}
-    </button>
+            data-testid="pull-data-btn">Pull Data</button>
   </section>
 
   {% if error %}
     <div class="notice notice-error" role="alert">{{ error }}</div>
+  {% elif not analysis %}
+    <div class="notice notice-info" role="status" data-testid="no-analysis">
+      No analysis has been computed yet. Click Update Analysis to queue one; this page reloads when
+      the worker has stored it.</div>
   {% else %}
     <section class="summary">
       <div class="stat"><span class="stat-value">{{ "{:,}".format(analysis.summary.total_entries) }}</span>
         <span class="stat-label">entries in the database</span></div>
       <div class="stat"><span class="stat-value">{{ analysis.summary.newest_entry.strftime("%b %d, %Y") if analysis.summary.newest_entry else "–" }}</span>
         <span class="stat-label">newest entry added</span></div>
-      <div class="stat"><span class="stat-value stat-small">{{ computed_at }}</span>
-        <span class="stat-label">results computed</span></div>
+      <div class="stat"><span class="stat-value stat-small" data-testid="computed-at">{{ computed_at or "–" }}</span>
+        <span class="stat-label">Analysis computed at</span></div>
     </section>
 
     <section class="grid">
@@ -77,47 +83,83 @@
 </main>
 
 <script>
-  // Both buttons are plain POSTs to a JSON API (see web/app/routes.py): no page-wide
-  // form submit, so a 409 "busy" response can be shown without a reload.
+  // Both buttons are plain POSTs to a JSON API (see web/app/routes.py).  A 202 means the
+  // request is queued for the worker: show a banner, then poll /api/analysis-status and
+  // reload once the stored analysis has a new computed_at.
   (function () {
-    const messageBox = document.getElementById("action-message");
-    function showMessage(text, kind) {
-      messageBox.textContent = text;
-      messageBox.className = "notice notice-" + kind;
-      messageBox.hidden = false;
+    const page = document.getElementById("analysis-page");
+    const statusBox = document.getElementById("action-message");
+    const errorBox = document.getElementById("action-error");
+    const buttons = [document.getElementById("pull-data-btn"),
+                     document.getElementById("update-analysis-btn")];
+    const POLL_INTERVAL_MS = 3000;          // ask every 3 seconds...
+    const MAX_POLLS = 40;                   // ...for about two minutes after the last click
+    const shownComputedAt = page.dataset.computedAt || null;
+    let pollsLeft = 0;
+
+    function show(box, text, kind) {
+      box.textContent = text;
+      box.className = "notice notice-" + kind;
+      box.hidden = false;
+    }
+    function setBusy(busy) {
+      buttons.forEach((button) => { button.disabled = busy; });
     }
     async function post(url) {
-      const response = await fetch(url, { method: "POST" });
-      const body = await response.json().catch(() => ({}));
-      return { status: response.status, body };
+      try {
+        const response = await fetch(url, { method: "POST" });
+        const body = await response.json().catch(() => ({}));
+        return { status: response.status, body };
+      } catch (err) {
+        return { status: 0, body: { error: "the server could not be reached" } };
+      }
     }
-    document.getElementById("pull-data-btn").addEventListener("click", async (event) => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      button.textContent = "Pulling…";
-      const { status, body } = await post("{{ url_for('analysis.pull_data') }}");
-      if (status === 200 && body.ok) {
-        // Leave the result on screen briefly, then reload so the analysis includes the new rows.
-        showMessage(`Pull Data finished: ${body.inserted} new row(s) added. Refreshing the results…`, "success");
-        setTimeout(() => window.location.reload(), 1500);
+    async function analysisChanged() {
+      try {
+        const response = await fetch(page.dataset.statusUrl, { cache: "no-store" });
+        const body = await response.json();
+        return Boolean(body.ok && body.computed_at && body.computed_at !== shownComputedAt);
+      } catch (err) {
+        return false;                       // a missed poll is retried on the next tick
+      }
+    }
+    async function poll() {
+      if (await analysisChanged()) {
+        pollsLeft = 0;
+        show(statusBox, "The worker finished: the analysis was updated. Reloading…", "success");
+        window.location.reload();
         return;
       }
-      if (status === 409) {
-        showMessage("Pull Data is already running; this click did nothing.", "warning");
-      } else {
-        showMessage("Pull Data failed: " + (body.error || "unknown error"), "error");
+      pollsLeft -= 1;
+      if (pollsLeft <= 0) {
+        show(statusBox, "Request queued, but the analysis has not changed yet: the worker may " +
+             "still be busy, or found nothing new. Reload the page later to check.", "warning");
+        return;
       }
-      button.disabled = false;
-      button.textContent = "Pull Data";
-    });
-    document.getElementById("update-analysis-btn").addEventListener("click", async () => {
-      const { status } = await post("{{ url_for('analysis.update_analysis') }}");
-      if (status === 409) {
-        showMessage("New data is currently being retrieved by Pull Data; try Update Analysis again shortly.", "warning");
-      } else {
-        window.location.reload();
+      setTimeout(poll, POLL_INTERVAL_MS);
+    }
+    async function queue(url, label) {
+      errorBox.hidden = true;
+      setBusy(true);                        // only while this click is being sent
+      const { status, body } = await post(url);
+      setBusy(false);
+      if (status === 202 && body.queued) {
+        show(statusBox, `Request queued: ${label}. The worker is processing it; this page ` +
+             "reloads when the updated analysis is ready.", "info");
+        const idle = pollsLeft <= 0;
+        pollsLeft = MAX_POLLS;              // every click restarts the two-minute window
+        if (idle) {
+          setTimeout(poll, POLL_INTERVAL_MS);
+        }
+        return;
       }
-    });
+      errorBox.setAttribute("role", "alert");   // announced right away by screen readers
+      show(errorBox, `${label} could not be queued: ` + (body.error || "unknown error"), "error");
+    }
+    buttons[0].addEventListener("click",
+      () => queue("{{ url_for('analysis.pull_data') }}", "Pull Data"));
+    buttons[1].addEventListener("click",
+      () => queue("{{ url_for('analysis.update_analysis') }}", "Update Analysis"));
   })();
 </script>
 {% endblock %}

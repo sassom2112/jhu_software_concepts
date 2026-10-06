@@ -1,9 +1,45 @@
 .vscode/
 
-# pytest / pytest-cov artifacts: pytest runs from the repo root (module_4/pytest.ini's
-# --cov=module_4/src path), so pytest-cov's .coverage lands here; .pytest_cache goes to
-# module_4/ (pytest's rootdir, where pytest.ini lives) and is ignored there too.
+# pytest / pytest-cov artifacts: each module's tests run from the repository root (its
+# pytest.ini measures module_N/src), so pytest-cov's .coverage lands here; .pytest_cache
+# goes to the module folder (pytest's rootdir, where pytest.ini lives).  Ignored anywhere.
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
+
+# --------------------------------------------------------------------------------------
+# Module 6.  These rules used to live in module_6/.gitignore; repository-level files now
+# live at the root.  Patterns with a slash are anchored to module_6/, the rest apply
+# anywhere in the repository (modules 1-5 keep their own .gitignore files as submitted).
+# --------------------------------------------------------------------------------------
+
+# virtual environments and Python caches
+.venv/
+__pycache__/
+*.pyc
+
+# secrets: module_6/.env holds the real passwords (Docker Compose reads it); only the
+# placeholder file .env.example is committed
+.env
+.env.*
+!.env.example
+
+# packaging output of `pip install -e .` / `python -m build`.  build/ is anchored to
+# module_6/ on purpose: a bare build/ would also hide docs/build/html, which is committed.
+*.egg-info/
+/module_6/build/
+/module_6/dist/
+
+# Sphinx build output (docs/build/html is committed as the deliverable; intermediates are not)
+/module_6/docs/build/doctrees/
+/module_6/docs/build/html/.doctrees/
+
+# runtime data of the command-line scraper (same as module_2/module_3)
+/module_6/data/raw_html/
+/module_6/data/*.jsonl
+/module_6/data/*.tmp
+/module_6/data/*.log
+/module_6/data/*.pid
+/module_6/data/checkpoint.json
+/module_6/data/raw_entries.json

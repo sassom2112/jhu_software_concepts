@@ -6,7 +6,13 @@ JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 Every analysis below is expressed entirely in SQL; Python only sends the query
 and formats the numbers it gets back.  The same SQL text, question wording and
 explanations are reused by build_query_results.py to produce
-query_results.pdf, so the PDF always shows exactly what this file runs.
+query_results.pdf, so the PDF always shows exactly what this file runs, and by
+analytics.py, which stores the answers as the snapshot the web page shows.
+
+answer_all() runs every question on a cursor the caller provides and changes
+nothing about its transaction, so the worker can compute the answers inside
+the same read-write transaction that stores them.  run_all() wraps it in a
+read-only transaction of its own for the command line and the PDF report.
 
 Usage::
 
@@ -71,6 +77,13 @@ def statement_params(number: str) -> dict[str, object]:
     """The values bound to question *number*'s placeholders (the LIMIT is clamped)."""
     return {"accepted": ACCEPTED_PATTERN, "limit": clamp_limit(ROW_LIMITS[number], default=1)}
 
+
+# The two numbers at the top of the web page: how many entries, and the newest date added.
+SQL_SUMMARY = _statement(r"""
+SELECT COUNT(*) AS total_entries, MAX(date_added) AS newest_entry
+FROM {table}
+LIMIT {limit}
+""")
 
 SQL_Q1 = _statement(r"""
 SELECT COUNT(*) AS fall_2026_entries
@@ -419,12 +432,29 @@ ANSWER_FUNCTIONS = (answer_q1, answer_q2, answer_q3, answer_q4, answer_q5, answe
 READ_ONLY_STATEMENT = sql.SQL("SET TRANSACTION READ ONLY")
 
 
+def database_summary(cur: psycopg.Cursor) -> dict:
+    """{"total_entries": int, "newest_entry": date or None}: the top of the web page.
+
+    *cur* must return rows as dicts (row_factory=dict_row)."""
+    cur.execute(SQL_SUMMARY, {"limit": 1})
+    return dict(cur.fetchone())
+
+
+def answer_all(cur: psycopg.Cursor) -> list[Answer]:
+    """Every question, in order, on *cur* (row_factory=dict_row).
+
+    Only SELECTs are sent: the caller's transaction, read-only or not, is left
+    exactly as it was, so the worker can store the answers in the same one.
+    """
+    return [function(cur) for function in ANSWER_FUNCTIONS]
+
+
 def run_all(conn: psycopg.Connection) -> list[Answer]:
     """Run every question inside one read-only transaction (a consistent snapshot)."""
     with conn.transaction():
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(READ_ONLY_STATEMENT)
-            return [function(cur) for function in ANSWER_FUNCTIONS]
+            return answer_all(cur)
 
 
 # --------------------------------------------------------------------------- #

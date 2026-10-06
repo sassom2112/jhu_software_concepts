@@ -25,7 +25,7 @@ Cloudflare challenge page stops the run immediately; a 5xx or a network error
 is retried only a couple of times, slowly.  Re-running the script later
 resumes from the saved checkpoint.
 
-Public API used by the web app and the instructor's tooling::
+Public API used by the worker and the instructor's tooling::
 
     GradCafeScraper.scrape_data()  -> list[dict]
     save_data(entries, path)       -> None
@@ -49,6 +49,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Container
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urljoin, urlparse, urlunparse
@@ -575,7 +576,7 @@ class GradCafeScraper:
         logger.info("Re-parsed %d cached pages -> %d entries", len(cached), len(self.entries))
         return self.entries
 
-    def scrape_new_entries(self, known_ids: set[int], max_pages: int = 50, progress=None,
+    def scrape_new_entries(self, known_ids: Container[int], max_pages: int = 50, progress=None,
                            start_url: str | None = None) -> tuple[list[dict], int, str | None]:
         """Fetch only entries that are not stored yet (Module 3 "Pull Data").
 
@@ -587,6 +588,11 @@ class GradCafeScraper:
         full scrape; robots.txt, the politeness delay and the stop-on-block
         rules apply exactly as in scrape_data().
 
+        ``known_ids`` is anything that answers ``result_id in known_ids``: a set
+        of stored ids, or a watermark test such as
+        incremental_scraper.SeenUpTo(last_seen), which knows every id up to
+        last_seen without holding them all.
+
         Returns (new raw entries, pages fetched, resume_url).  resume_url is the
         next page to fetch when ``max_pages`` ran out before a known entry was
         reached, so a later run can fill the gap; otherwise it is None.
@@ -594,7 +600,7 @@ class GradCafeScraper:
         """
         self._require_robots_permission()
         url = start_url or self._build_start_url()
-        seen = set(known_ids)
+        taken: set[int] = set()  # collected by this run: a repeated entry is taken once
         new_entries: list[dict] = []
         pages = 0
         # Every way out is a return below: a known entry, no next page, or the page limit.
@@ -608,8 +614,9 @@ class GradCafeScraper:
             html = self._fetch_page(url)
             pages += 1
             page_entries, next_url = self._parse_page(html, url)
-            fresh = [entry for entry in page_entries if entry["result_id"] not in seen]
-            seen.update(entry["result_id"] for entry in fresh)
+            fresh = [entry for entry in page_entries
+                     if entry["result_id"] not in known_ids and entry["result_id"] not in taken]
+            taken.update(entry["result_id"] for entry in fresh)
             new_entries.extend(fresh)
             logger.info("new-entries page %d: %d entries, %d new (total new %d)",
                         pages, len(page_entries), len(fresh), len(new_entries))

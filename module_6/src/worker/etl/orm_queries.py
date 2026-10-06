@@ -12,7 +12,7 @@ query_data.py uses, so equivalent questions give identical answers.
 Console usage::
 
     python -m worker.etl.orm_queries          # Questions 1, 4, 5, 8, 9 and original Question 10
-    python -m worker.etl.orm_queries --all    # all eleven questions (what the Flask page shows)
+    python -m worker.etl.orm_queries --all    # all eleven questions (what the web page shows)
 """
 
 # SQLAlchemy generates func.count() & co. at runtime, so Pylint wrongly reports "not callable".
@@ -418,7 +418,9 @@ def build_answers(session: Session, numbers: tuple[str, ...] | None = None) -> l
 
 
 def get_analysis() -> dict:
-    """Everything the Flask page displays, read through the ORM in one session."""
+    """Everything the web page displays, computed through the ORM in one session.
+
+    The page itself shows the SQL snapshot (analytics.py); the tests check the two agree."""
     with SessionLocal() as session:
         return {"summary": database_summary(session), "answers": build_answers(session)}
 

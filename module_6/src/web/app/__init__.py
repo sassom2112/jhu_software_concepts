@@ -2,15 +2,21 @@
 web.app - Flask front end for the Grad Café analysis (Module 6).
 
 create_app() is the application factory.  Every external dependency the
-routes need — the scraper, the loader, the analysis query — is injected as a
-keyword argument with a production default, so tests can call::
+routes need - the task publisher, the analysis snapshot, its status and the
+applicant search - is injected as a keyword argument with a production
+default, so tests can call::
 
-    create_app(scrape_fn=fake_scrape, load_fn=fake_load, query_fn=fake_query)
+    create_app(publish_fn=fake_publish, query_fn=fake_query)
 
-and get a fully working Flask app wired to fakes, with no real network call
-and no real database required unless a test wants one.  Importing this
-package imports orm_queries (and so models), which builds the SQLAlchemy
-engine but never opens a connection.
+and get a fully working Flask app wired to fakes, with no RabbitMQ and no
+database required unless a test wants one.  Importing this package opens no
+connection: the defaults connect only when a request needs them.
+
+The web app does no data-modifying work and runs no analysis queries itself:
+the buttons publish tasks for the worker (web/publisher.py), and the page reads
+the analysis snapshot the worker stored (db/snapshot.py).  It imports nothing
+from the worker package and needs neither SQLAlchemy nor the scraper's
+libraries, so the web image contains only Flask, psycopg and pika.
 """
 
 from __future__ import annotations
@@ -21,56 +27,54 @@ from typing import Callable
 
 from flask import Flask
 
+from web import publisher
 from web.app.applicant_search import SearchRequest
-from worker.etl import orm_queries
 
 from . import services
 from .routes import bp
 
-ScrapeFn = Callable[[], list[dict]]
-LoadFn = Callable[[list[dict]], int]
-QueryFn = Callable[[], dict]
+PublishFn = Callable[..., None]
+QueryFn = Callable[[], dict | None]
+StatusFn = Callable[[], dict | None]
 SearchFn = Callable[[SearchRequest], list[dict]]
 
 
 def create_app(
     *,
-    scrape_fn: ScrapeFn | None = None,
-    load_fn: LoadFn | None = None,
+    publish_fn: PublishFn | None = None,
     query_fn: QueryFn | None = None,
+    status_fn: StatusFn | None = None,
     search_fn: SearchFn | None = None,
 ) -> Flask:
     """Build and configure the Flask application.
 
     Args:
-        scrape_fn: no-argument callable returning newly scraped raw entries.
-            Defaults to services.default_scrape_fn (talks to Grad Café).
-        load_fn: callable(raw_entries) -> rows inserted.  Defaults to
-            services.default_load_fn (cleans, then writes to PostgreSQL).
+        publish_fn: callable(kind, payload=None, headers=None) that queues a task
+            for the worker and raises if it cannot (see publisher.PUBLISH_ERRORS).
+            Defaults to publisher.publish_task (RabbitMQ at RABBITMQ_URL).
         query_fn: no-argument callable returning the dict the analysis page
-            renders.  Defaults to orm_queries.get_analysis (reads PostgreSQL
-            through the SQLAlchemy model).
+            renders, or None when no analysis has been computed yet.  Defaults
+            to services.default_query_fn (reads the stored analysis snapshot).
+        status_fn: no-argument callable returning {"computed_at", "total_entries"}
+            of the stored snapshot, or None.  Defaults to
+            services.default_status_fn; GET /api/analysis-status serves it.
         search_fn: callable(SearchRequest) -> rows for GET /api/applicants.
             Defaults to services.default_search_fn (a read-only, parameterized
             query; see applicant_search.py).
     """
     app = Flask(__name__)
-    # Flash messages need a secret key.  Use FLASK_SECRET_KEY when set; otherwise
-    # a random key per process (nothing secret is stored in the repository).
+    # Flask's session signing needs a secret key.  Use FLASK_SECRET_KEY when set;
+    # otherwise a random key per process (nothing secret is stored in the repository).
     app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
-    app.config["SCRAPE_FN"] = scrape_fn or services.default_scrape_fn
-    app.config["LOAD_FN"] = load_fn or services.default_load_fn
-    app.config["QUERY_FN"] = query_fn or _default_query_fn
+    app.config["PUBLISH_FN"] = publish_fn or _default_publish_fn
+    app.config["QUERY_FN"] = query_fn or services.default_query_fn
+    app.config["STATUS_FN"] = status_fn or services.default_status_fn
     app.config["SEARCH_FN"] = search_fn or services.default_search_fn
-
-    # One PullState per application instance (not module-global), so each
-    # create_app() call in a test starts idle regardless of other tests.
-    app.pull_state = services.PullState()
-
     app.register_blueprint(bp)
     return app
 
 
-def _default_query_fn() -> dict:
-    """Production analysis query, looked up at call time (a live database is needed only now)."""
-    return orm_queries.get_analysis()
+def _default_publish_fn(kind: str, payload: dict | None = None,
+                        headers: dict | None = None) -> None:
+    """Production publisher, looked up at call time (RabbitMQ is needed only now)."""
+    publisher.publish_task(kind, payload, headers)

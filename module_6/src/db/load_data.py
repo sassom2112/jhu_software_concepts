@@ -5,10 +5,22 @@ JHU EN.605.256 Modern Software Concepts in Python - Module 3.
 
 Reads the Module 2 output (src/data/applicant_data.json by default: the
 cleaned records plus the LLM-standardized program and university) and loads it
-into a single table, `applicants`, using psycopg 3.
+into the `applicants` table, using psycopg 3.  It also owns the rest of the
+schema: create_schema() creates
+
+  * applicants: one row per Grad Cafe entry (CREATE_TABLE_STATEMENT);
+  * ingestion_watermarks: for each source, the newest result id the worker has
+    already read (last_seen, stored as TEXT), so a pull fetches only newer
+    entries; read with get_watermark(), moved with set_watermark() (until the
+    first pull records one, newest_p_id() says where the stored data ends);
+  * analysis_snapshot: the one row of analysis results the web page shows
+    (db/snapshot.py reads and writes it).
 
 Design:
-  * The table is created if it does not exist (see CREATE_TABLE_STATEMENT).
+  * Tables are created if they do not exist.  A table that already exists is
+    left alone without issuing CREATE at all, so a role without the CREATE
+    privilege on the schema (the web and worker roles) can call these
+    functions safely.
   * p_id is Grad Cafe's own result id (the number in the entry's URL), so it is
     a natural, stable primary key: the same entry always gets the same p_id.
   * Rows are bulk-copied into a temporary staging table and then inserted with
@@ -45,8 +57,8 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from db.db_config import (CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, TABLE_NAME,
-                          describe_target, get_database_url)
+from db.db_config import (CONNECT_TIMEOUT_SECONDS, INVALID_SETTINGS_MESSAGE, SNAPSHOT_TABLE,
+                          TABLE_NAME, WATERMARK_TABLE, describe_target, get_database_url)
 from db.jsonio import load_data as load_json  # Module 2 JSON reader (plain or .gz)
 from db.query_limits import MAX_LIMIT, clamp_limit
 
@@ -94,6 +106,7 @@ COLUMN_TYPES = (
     ("llm_generated_university", "TEXT"),
 )
 STAGING_TABLE = "applicants_staging"
+WATERMARK_SOURCE = "gradcafe"   # the ingestion_watermarks row of the Grad Cafe scraper
 
 # Built with psycopg's sql module: names are quoted with sql.Identifier, and no
 # f-string, + or .format() ever puts text into a statement.
@@ -105,6 +118,41 @@ CREATE_TABLE_STATEMENT = sql.SQL("CREATE TABLE IF NOT EXISTS {table} ({columns})
     ),
 )
 DROP_TABLE_STATEMENT = sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(TABLE_NAME))
+# The watermark table exactly as the assignment specifies it.  last_seen is TEXT so any
+# sort key fits; this project stores the newest Grad Cafe result id, e.g. '1020481'.
+CREATE_WATERMARK_TABLE_STATEMENT = sql.SQL(
+    "CREATE TABLE IF NOT EXISTS {table} ("
+    "source TEXT PRIMARY KEY, "
+    "last_seen TEXT, "
+    "updated_at TIMESTAMPTZ DEFAULT now())"
+).format(table=sql.Identifier(WATERMARK_TABLE))
+# One row (id = 1) holding every number the analysis page shows, as JSON.  The worker
+# replaces it after each change; the web app only reads it (see db/snapshot.py).
+CREATE_SNAPSHOT_TABLE_STATEMENT = sql.SQL(
+    "CREATE TABLE IF NOT EXISTS {table} ("
+    "id SMALLINT PRIMARY KEY CHECK (id = 1), "
+    "computed_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+    "payload JSONB NOT NULL)"
+).format(table=sql.Identifier(SNAPSHOT_TABLE))
+# Each table and the statement that creates it, in creation order.
+SCHEMA_STATEMENTS = (
+    (TABLE_NAME, CREATE_TABLE_STATEMENT),
+    (WATERMARK_TABLE, CREATE_WATERMARK_TABLE_STATEMENT),
+    (SNAPSHOT_TABLE, CREATE_SNAPSHOT_TABLE_STATEMENT),
+)
+# to_regclass() returns NULL for a table that does not exist, instead of failing.
+TABLE_EXISTS_STATEMENT = sql.SQL("SELECT to_regclass({name}) IS NOT NULL LIMIT 1").format(
+    name=sql.Placeholder("name")
+)
+GET_WATERMARK_STATEMENT = sql.SQL(
+    "SELECT last_seen FROM {table} WHERE source = {source} LIMIT 1"
+).format(table=sql.Identifier(WATERMARK_TABLE), source=sql.Placeholder("source"))
+SET_WATERMARK_STATEMENT = sql.SQL(
+    "INSERT INTO {table} (source, last_seen, updated_at) VALUES ({source}, {last_seen}, now()) "
+    "ON CONFLICT (source) DO UPDATE SET last_seen = EXCLUDED.last_seen, "
+    "updated_at = EXCLUDED.updated_at"
+).format(table=sql.Identifier(WATERMARK_TABLE), source=sql.Placeholder("source"),
+         last_seen=sql.Placeholder("last_seen"))
 _COLUMN_LIST = sql.SQL(", ").join(sql.Identifier(c) for c in COLUMNS)
 _NAMES = {
     "table": sql.Identifier(TABLE_NAME),
@@ -123,6 +171,9 @@ INSERT_NEW_ROWS_STATEMENT = sql.SQL(
 ).format(batch=sql.Placeholder("batch"), **_NAMES)
 STAGING_DROP_STATEMENT = sql.SQL("DROP TABLE {staging}").format(**_NAMES)
 COUNT_ROWS_STATEMENT = sql.SQL("SELECT COUNT(*) FROM {table} LIMIT {limit}").format(
+    limit=sql.Placeholder("limit"), **_NAMES
+)
+NEWEST_ID_STATEMENT = sql.SQL("SELECT MAX({key}) FROM {table} LIMIT {limit}").format(
     limit=sql.Placeholder("limit"), **_NAMES
 )
 FETCH_APPLICANTS_STATEMENT = sql.SQL(
@@ -218,12 +269,60 @@ def connect() -> psycopg.Connection:
     return psycopg.connect(get_database_url(), connect_timeout=CONNECT_TIMEOUT_SECONDS)
 
 
-def create_table(conn: psycopg.Connection, reset: bool = False) -> None:
-    """Create the applicants table (optionally dropping it first)."""
+def table_exists(conn: psycopg.Connection, name: str) -> bool:
+    """True if a table called *name* is visible on the search path (to_regclass)."""
     with conn.cursor() as cur:
-        if reset:
-            cur.execute(DROP_TABLE_STATEMENT)
-        cur.execute(CREATE_TABLE_STATEMENT)
+        cur.execute(TABLE_EXISTS_STATEMENT, {"name": name})
+        return bool(cur.fetchone()[0])
+
+
+def _create_if_missing(conn: psycopg.Connection, name: str, statement: sql.Composed) -> None:
+    """Run the CREATE TABLE *statement* only when table *name* does not exist yet.
+
+    Checking first matters: PostgreSQL checks the CREATE privilege on the schema
+    before it looks at IF NOT EXISTS, so even CREATE TABLE IF NOT EXISTS fails for
+    a role without that privilege, although the table is already there.
+    """
+    if not table_exists(conn, name):
+        conn.execute(statement)
+
+
+def create_table(conn: psycopg.Connection, reset: bool = False) -> None:
+    """Create the applicants table if it is missing (with *reset*, drop it first)."""
+    if reset:
+        conn.execute(DROP_TABLE_STATEMENT)
+    _create_if_missing(conn, TABLE_NAME, CREATE_TABLE_STATEMENT)
+
+
+def create_schema(conn: psycopg.Connection, reset: bool = False) -> None:
+    """Create every missing table: applicants, ingestion_watermarks and analysis_snapshot.
+
+    *reset* drops and recreates applicants only (see create_table); the other
+    two tables are never dropped here.
+    """
+    create_table(conn, reset=reset)
+    for name, statement in SCHEMA_STATEMENTS[1:]:
+        _create_if_missing(conn, name, statement)
+
+
+def get_watermark(conn: psycopg.Connection, source: str = WATERMARK_SOURCE) -> str | None:
+    """The last_seen value stored for *source*, or None if it has never been set."""
+    with conn.cursor() as cur:
+        cur.execute(GET_WATERMARK_STATEMENT, {"source": source})
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def set_watermark(conn: psycopg.Connection, last_seen: str,
+                  source: str = WATERMARK_SOURCE) -> None:
+    """Store *last_seen* for *source* (insert or update, updated_at = now()).
+
+    The value is stored as given: the caller decides it may only move forward.
+    The caller controls the transaction, so the watermark commits together
+    with the rows it describes, or not at all.
+    """
+    with conn.cursor() as cur:
+        cur.execute(SET_WATERMARK_STATEMENT, {"source": source, "last_seen": str(last_seen)})
 
 
 def load_records(conn: psycopg.Connection, records: Iterable[dict]) -> tuple[int, int, int]:
@@ -259,6 +358,17 @@ def count_rows(conn: psycopg.Connection) -> int:
         return cur.fetchone()[0]
 
 
+def newest_p_id(conn: psycopg.Connection) -> int | None:
+    """The highest stored p_id (Grad Cafe's newest result id), or None for an empty table.
+
+    Grad Cafe numbers its results in the order they are posted, so this is
+    where the stored data ends; the worker starts from it while no watermark
+    has been recorded yet."""
+    with conn.cursor() as cur:
+        cur.execute(NEWEST_ID_STATEMENT, {"limit": 1})
+        return cur.fetchone()[0]
+
+
 def fetch_applicants(conn: psycopg.Connection, limit: object = MAX_LIMIT) -> list[dict]:
     """The newest stored rows (at most *limit*, clamped to 1..MAX_LIMIT) as dicts keyed by
     the Module 3 column names, newest p_id first."""
@@ -272,12 +382,21 @@ def fetch_applicants(conn: psycopg.Connection, limit: object = MAX_LIMIT) -> lis
 # --------------------------------------------------------------------------- #
 
 
-def _local_file(name: str) -> Path:
+def input_path(name: str) -> Path:
     """Input files are looked up in the data folder (DATA_DIR) by bare name (no path traversal)."""
     base = os.path.basename(os.path.normpath(name))
     if not base or base in (".", ".."):
         raise ValueError(f"not a usable file name: {name!r}")
     return DATA_DIR / base
+
+
+def read_input(name: str) -> tuple[Path, list[dict]]:
+    """(path, records) of the JSON input file *name* in the data folder.
+
+    Raises OSError (missing or unreadable) or ValueError (an unusable name, or
+    not a JSON list)."""
+    path = input_path(name)
+    return path, load_json(path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -290,12 +409,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="JSON (or .json.gz) file name in the data folder "
                              f"(default {DEFAULT_INPUT})")
     parser.add_argument("--reset", action="store_true",
-                        help="drop and recreate the applicants table before loading")
+                        help="drop and recreate the applicants table before loading "
+                             "(the watermark and snapshot tables are kept)")
     args = parser.parse_args(argv)
 
     try:
-        path = _local_file(args.file)
-        records = load_json(path)
+        path, records = read_input(args.file)
     except (OSError, ValueError) as err:
         print(f"error: cannot read input: {err}", file=sys.stderr)
         return 1
@@ -314,7 +433,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         with conn:  # commits on success, rolls back on any exception, then closes
-            create_table(conn, reset=args.reset)
+            create_schema(conn, reset=args.reset)
             inserted, present, unusable = load_records(conn, records)
             total = count_rows(conn)
     except psycopg.Error as err:

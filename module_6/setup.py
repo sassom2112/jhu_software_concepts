@@ -7,9 +7,9 @@ installs the project in editable mode: the virtual environment points at src/
 instead of holding a copy of it.  src/ holds three packages - web (the Flask
 app, web.app), worker (the ETL scripts, worker.etl) and db (settings, loader,
 roles; shared by both) - and every module then imports from any folder by its
-full name (db.load_data, web.app, worker.etl.scrape, ...).  The gradcafe-load
-and gradcafe-app-role commands below run from anywhere, without editing
-sys.path.  A change to the code takes effect without reinstalling.
+full name (db.load_data, web.app, worker.etl.scrape, ...).  The gradcafe-load,
+gradcafe-roles and gradcafe-bootstrap commands below run from anywhere, without
+editing sys.path.  A change to the code takes effect without reinstalling.
 tests/conftest.py and docs/source/conf.py still put src/ on sys.path
 themselves, so the test suite and the Sphinx build also work where the project
 is not installed.
@@ -34,9 +34,9 @@ HERE = Path(__file__).resolve().parent
 
 setup(
     name="gradcafe-analysis",
-    version="0.5.0",
+    version="0.6.0",
     description="Grad Cafe admissions scraper, PostgreSQL loader and Flask analysis page "
-                "(JHU EN.605.256 Modern Software Concepts in Python, Module 5)",
+                "(JHU EN.605.256 Modern Software Concepts in Python, Module 6)",
     long_description=(HERE / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="Mike Sasso",
@@ -48,6 +48,7 @@ setup(
     install_requires=[
         "Flask>=3.0",
         "psycopg[binary]>=3.2.4",   # 3.2.4+: Pylint 10/10 (older releases give false E1129)
+        "pika>=1.3",                # RabbitMQ client of the web publisher and the worker
         "SQLAlchemy>=2.0.18",       # 2.0.18+: create_engine rejects a non-numeric port
         "beautifulsoup4>=4.12",
         "lxml>=5.0",
@@ -59,7 +60,8 @@ setup(
     entry_points={
         "console_scripts": [
             "gradcafe-load=db.load_data:main",
-            "gradcafe-app-role=db.db_roles:main",
+            "gradcafe-roles=db.db_roles:main",
+            "gradcafe-bootstrap=worker.bootstrap:main",
         ],
     },
 )

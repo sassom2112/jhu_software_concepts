@@ -19,6 +19,9 @@ SQLAlchemy==2.0.54
 greenlet==3.5.6
 typing_extensions==4.16.0
 
+# Messaging: the RabbitMQ client of the web publisher and the worker (no dependencies of its own)
+pika==1.4.4
+
 # Scraper: HTML parsing
 beautifulsoup4==4.15.0
 soupsieve==2.9.2
