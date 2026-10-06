@@ -13,7 +13,7 @@ from datetime import date
 
 import pytest
 
-from load_data import COLUMNS, count_rows, fetch_applicants
+from db.load_data import COLUMNS, count_rows, fetch_applicants
 
 # The columns every freshly pulled row must have filled in.  (The two llm_*
 # columns stay NULL until the separate LLM step runs, so they are not here.)

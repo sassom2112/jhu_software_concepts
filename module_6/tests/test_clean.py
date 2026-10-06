@@ -15,11 +15,11 @@ import sys
 
 import pytest
 
-import clean
-from clean import (_classify_tags, _clean_text, _normalize_status, _parse_applicant_type, _parse_date_added,
-                   _parse_decision, _parse_iso_date, _parse_term, _resolve_decision_date, _to_number,
-                   _to_number_or_none, clean_data, main)
-from scrape import load_data, save_data
+from worker.etl import clean
+from worker.etl.clean import (_classify_tags, _clean_text, _normalize_status, _parse_applicant_type,
+                              _parse_date_added, _parse_decision, _parse_iso_date, _parse_term,
+                              _resolve_decision_date, _to_number, _to_number_or_none, clean_data, main)
+from worker.etl.scrape import load_data, save_data
 
 pytestmark = pytest.mark.db
 
@@ -178,12 +178,12 @@ def test_clean_text_collapses_whitespace_only(value, keep_newlines, expected):
 
 
 # --------------------------------------------------------------------------- #
-#                       Command line: python clean.py                         #
+#                  Command line: python -m worker.etl.clean                   #
 # --------------------------------------------------------------------------- #
 
 @pytest.fixture
 def work_dir(tmp_path, monkeypatch):
-    """Run clean.py's command line inside a temporary folder instead of src/."""
+    """Run clean.py's command line inside a temporary folder instead of module_6/."""
     monkeypatch.setattr(clean, "HERE", tmp_path)
     (tmp_path / "data").mkdir()
     return tmp_path
@@ -215,6 +215,6 @@ def test_running_clean_py_exits_with_mains_code(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["clean.py", "--output", ".."])
 
     with pytest.raises(SystemExit) as stopped:
-        runpy.run_module("clean", run_name="__main__")
+        runpy.run_module("worker.etl.clean", run_name="__main__")
 
     assert stopped.value.code == 1

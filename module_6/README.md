@@ -44,19 +44,23 @@ module_5/
 ├── .env.example              # names of the environment variables, placeholder values only
 ├── .github/workflows/ci.yml  # copy of the workflow GitHub runs (section 8)
 │
-├── src/                      # the application
-│   ├── webapp/               #   Flask: create_app(), routes (pages, buttons, search API), services, templates
-│   ├── run.py                #   starts the web page
-│   ├── scrape.py             #   Grad Café scraper, with helpers site_urls.py, robots_rules.py,
-│   │                         #   scrape_state.py and jsonio.py
-│   ├── clean.py              #   turns scraped text into table fields
-│   ├── load_data.py          #   PostgreSQL loader: INSERT ... ON CONFLICT (p_id) DO NOTHING
-│   ├── db_config.py          #   DATABASE_URL / DB_* / PG* variables -> connection
-│   ├── db_roles.py           #   creates the least-privilege role gradcafe_app
-│   ├── applicant_search.py   #   the search behind GET /api/applicants
-│   ├── query_limits.py       #   clamp_limit(): every row limit is 1-100
-│   ├── models.py, orm_queries.py      # SQLAlchemy model and the 11 questions through the ORM
-│   └── query_data.py, analysis_common.py, build_query_results.py   # the same questions in SQL
+├── src/                      # the application (the import root: packages web, worker, db)
+│   ├── web/
+│   │   ├── run.py            #   starts the web page
+│   │   └── app/              #   Flask: create_app(), routes (pages, buttons, search API), services, templates,
+│   │                         #   and applicant_search.py (the search behind GET /api/applicants)
+│   ├── worker/etl/
+│   │   ├── scrape.py         #   Grad Café scraper, with helpers site_urls.py, robots_rules.py, scrape_state.py
+│   │   ├── clean.py          #   turns scraped text into table fields
+│   │   ├── models.py, orm_queries.py      # SQLAlchemy model and the 11 questions through the ORM
+│   │   └── query_data.py, analysis_common.py, build_query_results.py   # the same questions in SQL
+│   ├── db/
+│   │   ├── load_data.py      #   PostgreSQL loader: INSERT ... ON CONFLICT (p_id) DO NOTHING
+│   │   ├── db_config.py      #   DATABASE_URL / DB_* / PG* variables -> connection
+│   │   ├── db_roles.py       #   creates the least-privilege role gradcafe_app
+│   │   ├── query_limits.py   #   clamp_limit(): every row limit is 1-100
+│   │   └── jsonio.py         #   JSON files (plain or .gz) shared by the scraper, cleaner and loader
+│   └── data/applicant_data.json   # Module 2 cleaned data with the LLM columns (30,500 entries)
 ├── tests/                    # all test code (section 7)
 ├── docs/                     # Sphinx sources and the built HTML (section 9)
 │
@@ -71,7 +75,6 @@ module_5/
 │                             # and the Module 3 screenshots
 │
 │   Data and tools carried over from earlier modules
-├── llm_extend_applicant_data.json, applicant_data.json   # Module 2 cleaned data (30,500 entries)
 ├── data/                     # raw_entries.json.gz, robots.txt (scraper evidence)
 ├── llm_hosting/              # the optional local-LLM standardizer (its own environment)
 └── query_results.pdf, limitations.pdf, screenshot.jpg    # Module 3 deliverables
@@ -84,19 +87,20 @@ You need Python 3.11 (`.python-version` pins 3.11.13; pyenv and uv both read it)
 
 Both methods below build the same environment. `requirements.txt` pins every package to an exact version:
 the application, the tests, Pylint and pydeps, and every package those pull in. `setup.py` then installs
-this project itself in editable mode, so `db_config`, `load_data`, `webapp` and the other modules import
-the same way from any folder.
+this project itself in editable mode, so `db.db_config`, `db.load_data`, `web.app` and the other modules
+import the same way from any folder.
 
-Keep the `-e`: only editable installs are supported. The command-line tools read and write their data
-files in `module_5/`, next to `src/`. A plain `pip install .` copies the modules into the virtual
-environment, and `gradcafe-load` then fails with `error: cannot read input`.
+Keep the `-e`: only editable installs are supported. The loader reads `src/data/` (or `DATA_DIR`); the
+other command-line tools read and write their data files in `module_6/`, next to `src/`. A plain
+`pip install .` copies the modules into the virtual environment, and `gradcafe-load` then fails with
+`error: cannot read input`.
 
 ### Option A: pip + venv
 
 ```bash
 git clone git@github.com:sassom2112/jhu_software_concepts.git
 # no GitHub SSH key? the repository is public: git clone https://github.com/sassom2112/jhu_software_concepts.git
-cd jhu_software_concepts/module_5
+cd jhu_software_concepts/module_6
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -109,7 +113,7 @@ pip check                       # No broken requirements found.
 ```bash
 git clone git@github.com:sassom2112/jhu_software_concepts.git
 # no GitHub SSH key? the repository is public: git clone https://github.com/sassom2112/jhu_software_concepts.git
-cd jhu_software_concepts/module_5
+cd jhu_software_concepts/module_6
 uv venv .venv                   # reads .python-version (3.11.13); downloads it if missing
 source .venv/bin/activate
 uv pip sync requirements.txt
@@ -123,13 +127,13 @@ later, run `uv pip install -e .` again too.
 
 ### Check the install
 
-Either way, with the virtual environment active and from `module_5`:
+Either way, with the virtual environment active and from `module_6`:
 
 ```bash
-python -c "import db_config, webapp; print('imports ok')"
+python -c "import db.db_config, web.app; print('imports ok')"
 gradcafe-load --help            # the commands from setup.py are on PATH
 pylint src                      # 10.00/10
-pydeps src/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o /tmp/dependency.svg
+pydeps src/web/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o /tmp/dependency.svg
 ```
 
 The last line writes a scratch copy, so checking never changes the committed `dependency.svg`. That
@@ -167,17 +171,17 @@ Nothing secret is committed. Copy `.env.example` to `.env` (git ignores it), rep
 
 ## 3. Running the application
 
-From `module_5`, with the virtual environment active. The administrator commands get a `DATABASE_URL`
+From `module_6`, with the virtual environment active. The administrator commands get a `DATABASE_URL`
 prefix, so only that one command runs as the table owner:
 
 ```bash
-DATABASE_URL=postgresql://gradcafe@localhost:5432/gradcafe python src/load_data.py   # or: gradcafe-load
+DATABASE_URL=postgresql://gradcafe@localhost:5432/gradcafe python -m db.load_data   # or: gradcafe-load
 source .env                     # sets DB_* and APP_DB_* (see .env.example)
-DATABASE_URL=postgresql://gradcafe@localhost:5432/gradcafe python src/db_roles.py    # creates gradcafe_app
-python src/run.py               # http://127.0.0.1:8080, logged in as gradcafe_app
+DATABASE_URL=postgresql://gradcafe@localhost:5432/gradcafe python -m db.db_roles    # creates gradcafe_app
+python src/web/run.py           # http://127.0.0.1:8080, logged in as gradcafe_app
 ```
 
-`load_data.py` loads `llm_extend_applicant_data.json`; a second run inserts 0 rows. `db_roles.py` creates the
+`load_data.py` loads `src/data/applicant_data.json`; a second run inserts 0 rows. `db_roles.py` creates the
 role, or resets it if it exists, and prints what the role may do.
 
 * **Pull Data** scrapes Grad Café entries newer than the newest stored one (at most 50 pages, `robots.txt`
@@ -189,13 +193,13 @@ role, or resets it if it exists, and prints what the role may do.
   (exact match, case-insensitive), `program` (contains), `sort` (`p_id`, `date_added`, `gpa`, `gre`, `gre_v`,
   `gre_aw`, `program`, `status`, `term`), `order` (`asc`/`desc`) and `limit` (default 20, clamped to 1-100).
   For example `/api/applicants?term=Fall%202026&status=Accepted&sort=gpa&limit=5`. A bad parameter gets 400.
-* Other tools: `python src/query_data.py` (all 11 answers in SQL), `python src/orm_queries.py --all`
-  (the same through SQLAlchemy), `python src/build_query_results.py` (writes `query_results.html`).
+* Other tools: `python -m worker.etl.query_data` (all 11 answers in SQL), `python -m worker.etl.orm_queries --all`
+  (the same through SQLAlchemy), `python -m worker.etl.build_query_results` (writes `query_results.html`).
 
 ## 4. Pylint
 
 ```bash
-cd module_5
+cd module_6
 pylint src
 ```
 
@@ -218,10 +222,10 @@ built.
 | Values are bound parameters (`%(name)s`), never pasted into SQL text | every query; `applicant_search.build_search_query()` for the search API |
 | Table and column names come from allow-lists and are quoted with `sql.Identifier` | `applicant_search.py` (`SORTABLE_COLUMNS`, `EXACT_FILTERS`, `CONTAINS_FILTERS`), `load_data.py`, `query_data.py` |
 | The sort direction is one of two fixed SQL fragments, never copied from the request | `applicant_search.py` |
-| Every `SELECT` has a `LIMIT`, and every limit that comes from a request is clamped to 1-100 | `query_limits.clamp_limit()`; `LIMIT` in `query_data.py`, `load_data.py`, `db_roles.py`, `webapp/services.py`; `.limit()` on every ORM query. The loader's `INSERT ... SELECT` is capped at its batch size; DDL, `GRANT` and `COPY` take no `LIMIT` |
+| Every `SELECT` has a `LIMIT`, and every limit that comes from a request is clamped to 1-100 | `query_limits.clamp_limit()`; `LIMIT` in `query_data.py`, `load_data.py`, `db_roles.py`, `web/app/services.py`; `.limit()` on every ORM query. The loader's `INSERT ... SELECT` is capped at its batch size; DDL, `GRANT` and `COPY` take no `LIMIT` |
 | Building a statement and running it are separate steps | `build_search_query()` returns `(statement, params)` and touches no database; `search_applicants()` only executes. Every other statement is a module-level constant |
 | Errors never echo database details | the search API and Pull Data return fixed messages and log only the exception class |
-| The search runs in a read-only transaction | `webapp/services.default_search_fn()` |
+| The search runs in a read-only transaction | `web/app/services.default_search_fn()` |
 
 `tests/test_sql_injection.py` attacks the search API with inputs such as `' OR '1'='1`,
 `'; DROP TABLE applicants; --` and a `UNION SELECT` that tries to read `pg_shadow`, with sort columns and
@@ -235,7 +239,7 @@ then bound as a parameter. The role password in `db_roles.py` is the only value 
 because `CREATE ROLE ... PASSWORD` cannot take a bound parameter; it comes from `APP_DB_PASSWORD` (never from
 a web request), and `sql.Literal` quotes and escapes it.
 
-**Least privilege.** The web app logs in as `gradcafe_app`, created by `src/db_roles.py`:
+**Least privilege.** The web app logs in as `gradcafe_app`, created by `src/db/db_roles.py`:
 
 ```sql
 CREATE ROLE "gradcafe_app" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION
@@ -261,7 +265,7 @@ vulnerable paths (`screenshots/snyk_test_before_fix.png`, `snyk-analysis.png`). 
 
 | Finding | Why it is not a vulnerability |
 | --- | --- |
-| Medium, SQL injection, `src/db_roles.py` | the value is the database's own name, read from the server and quoted by `sql.Identifier`; a test shows that `x"; DROP TABLE applicants; --` stays one quoted name |
+| Medium, SQL injection, `src/db/db_roles.py` | the value is the database's own name, read from the server and quoted by `sql.Identifier`; a test shows that `x"; DROP TABLE applicants; --` stays one quoted name |
 | Low, path traversal (3), `llm_hosting/app.py` | command-line arguments of a local tool; the person running it already has those files, and `_confine_path()` keeps paths inside the module folder |
 
 A fake password in a test was also flagged; it is now a random value. Snyk Code missed two real problems
@@ -272,12 +276,12 @@ otherwise).
 ## 6. Dependency graph
 
 ```bash
-cd module_5
-pydeps src/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o dependency.svg
+cd module_6
+pydeps src/web/run.py --noshow --max-bacon 0 --max-module-depth 1 -T svg -o dependency.svg
 ```
 
 pydeps reads the import statements and Graphviz draws them; an arrow points from a module to the module that
-imports it. The web app starts at `src/run.py` (there is no `app.py`). `--max-bacon 0` follows every import,
+imports it. The web app starts at `src/web/run.py` (there is no `app.py`). `--max-bacon 0` follows every import,
 and `--max-module-depth 1` draws each library as one box instead of hundreds of its internal modules. The
 graph shows `webapp` built on Flask (with Werkzeug, Jinja2, MarkupSafe, Click, ItsDangerous and Blinker),
 `scrape` using Beautiful Soup with lxml and soupsieve, and `db_config` as the one place that every database
@@ -286,12 +290,12 @@ module goes through, using psycopg and SQLAlchemy. `query_data.py`, `db_roles.py
 
 ## 7. Tests
 
-Run from the **repository root**, because `pytest.ini` measures `--cov=module_5/src`:
+Run from the **repository root**, because `pytest.ini` measures `--cov=module_6/src`:
 
 ```bash
 cd ..    # jhu_software_concepts/
 DATABASE_URL=postgresql://gradcafe@localhost:5432/gradcafe_test \
-  module_5/.venv/bin/python -m pytest module_5 -m "web or buttons or analysis or db or integration"
+  module_6/.venv/bin/python -m pytest module_6 -m "web or buttons or analysis or db or integration"
 ```
 
 Result: `331 passed`, `Required test coverage of 100% reached. Total coverage: 100.00%`, in about

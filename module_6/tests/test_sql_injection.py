@@ -14,11 +14,10 @@ import psycopg
 import pytest
 from psycopg import sql
 
-import applicant_search
-from applicant_search import SearchRequest, build_search_query
-from load_data import count_rows, load_records
-from query_limits import MAX_LIMIT, LimitError, clamp_limit
-from webapp import create_app
+from db.load_data import count_rows, load_records
+from db.query_limits import MAX_LIMIT, LimitError, clamp_limit
+from web.app import applicant_search, create_app
+from web.app.applicant_search import SearchRequest, build_search_query
 
 pytestmark = [pytest.mark.db, pytest.mark.web]
 

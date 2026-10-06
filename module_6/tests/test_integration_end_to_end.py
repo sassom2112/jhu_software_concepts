@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from bs4 import BeautifulSoup
 
-from load_data import fetch_applicants
+from db.load_data import fetch_applicants
 
 
 def fall_2026_applicant(entry_factory, result_id, citizenship, gpa, decision):

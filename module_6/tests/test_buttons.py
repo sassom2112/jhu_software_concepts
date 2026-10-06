@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from webapp import create_app  # sys.path already has src/ on it, thanks to conftest.py
+from web.app import create_app  # sys.path already has src/ on it, thanks to conftest.py
 
 
 # ---------------------------------------------------------------------------

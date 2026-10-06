@@ -16,9 +16,9 @@ from datetime import date
 
 import pytest
 
-import load_data
-from load_data import COLUMNS, _date, _float, _p_id, count_rows, create_table, load_records, main, record_to_row
-from scrape import save_data
+from db import load_data
+from db.load_data import COLUMNS, _date, _float, _p_id, count_rows, create_table, load_records, main, record_to_row
+from worker.etl.scrape import save_data
 
 pytestmark = pytest.mark.db
 
@@ -113,13 +113,13 @@ def test_create_table_reset_starts_over(db_conn):
 
 
 # --------------------------------------------------------------------------- #
-#                      Command line: python load_data.py                      #
+#                    Command line: python -m db.load_data                     #
 # --------------------------------------------------------------------------- #
 
 @pytest.fixture
 def input_dir(tmp_path, monkeypatch):
-    """Make load_data look for its input files in a temporary folder instead of src/."""
-    monkeypatch.setattr(load_data, "HERE", tmp_path)
+    """Make load_data look for its input files in a temporary folder instead of src/data/."""
+    monkeypatch.setattr(load_data, "DATA_DIR", tmp_path)
     return tmp_path
 
 
@@ -186,6 +186,6 @@ def test_running_load_data_py_exits_with_mains_code(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["load_data.py", "--file", "no-such-file.json"])
 
     with pytest.raises(SystemExit) as stopped:
-        runpy.run_module("load_data", run_name="__main__")      # same as: python load_data.py ...
+        runpy.run_module("db.load_data", run_name="__main__")   # same as: python -m db.load_data ...
 
     assert stopped.value.code == 1

@@ -34,17 +34,16 @@ import pytest
 from psycopg import errors, sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-import db_roles
-import load_data
-from applicant_search import SearchRequest
-from db_config import describe_target, get_database_url, get_sqlalchemy_url
-from db_roles import RoleError, build_role_statements, provision_app_role, role_privileges
-from load_data import count_rows
-from webapp import services
+from db import db_roles, load_data
+from db.db_config import describe_target, get_database_url, get_sqlalchemy_url
+from db.db_roles import RoleError, build_role_statements, provision_app_role, role_privileges
+from db.load_data import count_rows
+from web.app import services
+from web.app.applicant_search import SearchRequest
 
 pytestmark = pytest.mark.db          # marks every test in this file
 
-MODULE = Path(__file__).resolve().parent.parent      # module_5/
+MODULE = Path(__file__).resolve().parent.parent      # module_6/
 SRC = MODULE / "src"
 
 # A least-privilege app role: it can log in, read and add rows, and that is all.
@@ -147,7 +146,7 @@ def test_no_credentials_are_written_into_the_source():
         if CREDENTIAL.search(text)
     ]
 
-    assert SRC / "db_config.py" in files                # the scan really read the project
+    assert SRC / "db" / "db_config.py" in files         # the scan really read the project
     assert found == []                                  # and nothing looks like a password
 
 
@@ -335,14 +334,14 @@ def test_pull_data_and_search_work_as_the_app_role(db_conn, app_role, raw_entrie
 
 
 # --------------------------------------------------------------------------- #
-#                   The command line: python src/db_roles.py                  #
+#                   The command line: python -m db.db_roles                   #
 # --------------------------------------------------------------------------- #
 
 def test_the_command_line_needs_a_password(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["db_roles.py"])  # APP_DB_PASSWORD is unset (see conftest)
 
     with pytest.raises(SystemExit) as stopped:
-        runpy.run_module("db_roles", run_name="__main__")   # same as: python db_roles.py
+        runpy.run_module("db.db_roles", run_name="__main__")   # same as: python -m db.db_roles
 
     assert stopped.value.code == 1
     assert "APP_DB_PASSWORD" in capsys.readouterr().err

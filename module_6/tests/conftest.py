@@ -17,15 +17,15 @@ from pathlib import Path
 import pytest
 from psycopg.conninfo import conninfo_to_dict
 
-# Put module_5/src on sys.path, so the tests also run without `pip install -e .`.
+# Put module_6/src on sys.path, so the tests also run without `pip install -e .`.
 # The path is relative to THIS file, so it works from any directory.
 SRC = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(SRC))
 
-from webapp import create_app       # noqa: E402 (must come after the sys.path fix above)
-from db_config import get_database_url   # noqa: E402
-from load_data import connect, create_table   # noqa: E402
-from scrape import GradCafeScraper   # noqa: E402
+from web.app import create_app      # noqa: E402 (must come after the sys.path fix above)
+from db.db_config import get_database_url   # noqa: E402
+from db.load_data import connect, create_table   # noqa: E402
+from worker.etl.scrape import GradCafeScraper   # noqa: E402
 from fake_gradcafe import FakeSite   # noqa: E402  (tests/fake_gradcafe.py)
 
 # A realistic-shaped fake for QUERY_FN: same structure orm_queries.get_analysis()

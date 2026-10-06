@@ -18,11 +18,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import build_query_results
-import orm_queries
-import query_data
-from load_data import load_records
-from models import SessionLocal
+from db.load_data import load_records
+from worker.etl import build_query_results, orm_queries, query_data
+from worker.etl.models import SessionLocal
 
 pytestmark = [pytest.mark.analysis, pytest.mark.db]      # a test may carry more than one marker
 
@@ -234,6 +232,6 @@ def test_running_each_tool_as_a_script_exits_2_on_bad_settings(module, argv, mon
     monkeypatch.setattr(sys, "argv", argv)
 
     with pytest.raises(SystemExit) as stopped:
-        runpy.run_module(module, run_name="__main__")
+        runpy.run_module(f"worker.etl.{module}", run_name="__main__")
 
     assert stopped.value.code == 2

@@ -14,8 +14,8 @@ from decimal import Decimal
 import pytest
 from bs4 import BeautifulSoup
 
-from analysis_common import format_average, format_count, format_difference, format_percent, format_table
-from webapp import create_app
+from worker.etl.analysis_common import format_average, format_count, format_difference, format_percent, format_table
+from web.app import create_app
 
 # Mixes plain result lines with a table card, the way the real page does (Q10 and Q11 are tables).
 MIXED_ANALYSIS = {

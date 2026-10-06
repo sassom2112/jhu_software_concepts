@@ -16,7 +16,7 @@ import urllib.error
 
 import pytest
 
-import scrape
+from worker.etl import scrape
 from fake_gradcafe import ROBOTS_TXT, ROBOTS_URL, SITE, applicant, http_error, listing_page, page, survey_url
 
 pytestmark = pytest.mark.db

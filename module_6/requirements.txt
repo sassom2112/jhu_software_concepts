@@ -1,4 +1,4 @@
-# Exact versions of everything module_5 needs: the application, the tests and the
+# Exact versions of everything module_6 needs: the application, the tests and the
 # code-quality tools.  Packages that other packages pull in are listed too, because
 # `uv pip sync requirements.txt` installs exactly this list and nothing more.
 # The project itself is installed afterwards from setup.py:  pip install -e .

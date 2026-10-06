@@ -7,7 +7,7 @@ __pycache__/
 !.env.example
 
 # packaging output of `pip install -e .` / `python -m build`.  /build/ is anchored to
-# module_5/ on purpose: a bare build/ would also hide docs/build/html, which is committed.
+# module_6/ on purpose: a bare build/ would also hide docs/build/html, which is committed.
 *.egg-info/
 /build/
 /dist/

@@ -18,9 +18,9 @@ import urllib.error
 
 import pytest
 
-import scrape
+from worker.etl import scrape
 from fake_gradcafe import ROBOTS_URL, applicant, http_error, listing_page, page, survey_url
-from scrape import GradCafeScraper, load_data
+from worker.etl.scrape import GradCafeScraper, load_data
 
 pytestmark = pytest.mark.db
 
@@ -255,12 +255,12 @@ def test_reparse_without_cached_pages_is_an_error(scraper):
 
 
 # --------------------------------------------------------------------------- #
-#                      Command line: python scrape.py                         #
+#                  Command line: python -m worker.etl.scrape                  #
 # --------------------------------------------------------------------------- #
 
 @pytest.fixture
 def module_dir(tmp_path, monkeypatch):
-    """Run scrape.py's command line inside a temporary folder instead of src/."""
+    """Run scrape.py's command line inside a temporary folder instead of module_6/."""
     monkeypatch.setattr(scrape, "HERE", tmp_path)
     return tmp_path
 
@@ -335,12 +335,12 @@ def test_main_refuses_a_name_with_nothing_usable_in_it(module_dir, capsys):
 
 
 def test_running_scrape_py_exits_with_mains_code(fake_site, monkeypatch):
-    # runpy re-runs scrape.py from scratch, so HERE is the real src/ again: keep to an argument
-    # that is refused before anything is written, and keep fake_site as a safety net.
+    # runpy re-runs scrape.py from scratch, so HERE is the real module_6/ folder again: keep to
+    # an argument that is refused before anything is written, and keep fake_site as a safety net.
     monkeypatch.setattr(sys, "argv", ["scrape.py", "--data-dir", ".."])
 
     with pytest.raises(SystemExit) as stopped:
-        runpy.run_module("scrape", run_name="__main__")
+        runpy.run_module("worker.etl.scrape", run_name="__main__")
 
     assert stopped.value.code == 1
     assert fake_site.requested == []

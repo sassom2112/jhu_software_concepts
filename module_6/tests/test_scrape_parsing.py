@@ -16,9 +16,9 @@ import sys
 
 import pytest
 
-import scrape
+from worker.etl import scrape
 from fake_gradcafe import ROBOTS_TXT, SITE, applicant, listing_page, make_cursor, survey_url
-from scrape import GradCafeScraper, _clean_text, _looks_like_robots_file, _robots_allows, _safe_site_url
+from worker.etl.scrape import GradCafeScraper, _clean_text, _looks_like_robots_file, _robots_allows, _safe_site_url
 
 pytestmark = pytest.mark.db
 

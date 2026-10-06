@@ -16,9 +16,9 @@ import flask
 import pytest
 from bs4 import BeautifulSoup
 
-import scrape
-from models import Applicant
-from webapp import create_app, services
+from web.app import create_app, services
+from worker.etl import scrape
+from worker.etl.models import Applicant
 
 
 @pytest.mark.web
@@ -51,7 +51,7 @@ def test_run_py_starts_the_server_on_the_default_address(monkeypatch):
     for name in ("FLASK_HOST", "PORT", "FLASK_DEBUG"):
         monkeypatch.delenv(name, raising=False)
 
-    runpy.run_module("run", run_name="__main__")        # same as: python run.py
+    runpy.run_module("web.run", run_name="__main__")        # same as: python src/web/run.py
 
     assert started == [{"host": "127.0.0.1", "port": 8080, "debug": False}]
 
@@ -91,7 +91,7 @@ def test_models_refuses_unparseable_settings(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "host=localhost port=abc")
 
     with pytest.raises(SystemExit) as stopped:
-        runpy.run_module("models", alter_sys=True)      # a fresh import of models.py
+        runpy.run_module("worker.etl.models", alter_sys=True)      # a fresh import of models.py
 
     assert "connection settings are not valid" in str(stopped.value)
     assert "abc" not in str(stopped.value)              # never echo the bad setting back
