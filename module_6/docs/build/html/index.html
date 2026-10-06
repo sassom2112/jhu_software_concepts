@@ -1,0 +1,190 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grad Café Analytics &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f46eefca"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Overview and setup" href="overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Grad Café Analytics</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="grad-cafe-analytics">
+<h1>Grad Café Analytics<a class="headerlink" href="#grad-cafe-analytics" title="Link to this heading"></a></h1>
+<p>A small data service built over Modules 2–4 of JHU EN.605.256 <em>Modern Software
+Concepts in Python</em>. A scraper collects admissions results from
+<a class="reference external" href="https://www.thegradcafe.com/survey/">The Grad Café</a>, a cleaner turns them into
+structured records, PostgreSQL stores them, and a Flask page answers eleven
+questions about them. The page has two buttons: <strong>Pull Data</strong> fetches entries
+that are newer than anything stored, and <strong>Update Analysis</strong> refreshes the
+results.</p>
+<p>Module 4 adds an automated pytest suite with 100% line coverage of
+<code class="docutils literal notranslate"><span class="pre">module_4/src</span></code>, a GitHub Actions workflow that runs it against a real
+PostgreSQL on every push that changes <code class="docutils literal notranslate"><span class="pre">module_4</span></code>, and this documentation.</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview and setup</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#what-the-service-does">What the service does</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#install">Install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#postgresql">PostgreSQL</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#environment-variables">Environment variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#load-the-data">Load the data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#run-the-web-page">Run the web page</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#other-command-line-tools">Other command-line tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#run-the-tests">Run the tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#build-this-documentation">Build this documentation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#web-layer">Web layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#etl-layer">ETL layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#database-layer">Database layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#how-a-request-flows">How a request flows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#design-decisions">Design decisions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Operational notes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#busy-state-policy">Busy-state policy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#uniqueness-key">Uniqueness key</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#idempotency-strategy">Idempotency strategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#what-a-pull-fetches-and-how-politely">What a pull fetches, and how politely</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#rows-added-by-pull-data">Rows added by Pull Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#secrets-and-configuration">Secrets and configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operations.html#protecting-the-real-data-from-the-tests">Protecting the real data from the tests</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#running-the-tests-locally">Running the tests locally</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#running-the-application">Running the application</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#github-actions">GitHub Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#read-the-docs">Read the Docs</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#running-the-suite">Running the suite</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#markers">Markers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#stable-selectors">Stable selectors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#fixtures-and-test-doubles">Fixtures and test doubles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#techniques-used">Techniques used</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#continuous-integration">Continuous integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html#adding-a-test">Adding a test</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/web.html">Web layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/etl.html">ETL layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/database.html">Database and analysis layer</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<p>Source code: <a class="reference external" href="https://github.com/sassom2112/jhu_software_concepts">https://github.com/sassom2112/jhu_software_concepts</a> (folder <code class="docutils literal notranslate"><span class="pre">module_4</span></code>).</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="overview.html" class="btn btn-neutral float-right" title="Overview and setup" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

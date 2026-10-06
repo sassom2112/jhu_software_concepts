@@ -1,0 +1,36 @@
+# environments and caches
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+
+# packaging output of `pip install -e .` / `python -m build`.  /build/ is anchored to
+# module_5/ on purpose: a bare build/ would also hide docs/build/html, which is committed.
+*.egg-info/
+/build/
+/dist/
+
+# test/coverage artifacts (coverage_summary.txt is the one copy we commit, made on purpose)
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Sphinx build output (we commit docs/build/html as the deliverable later; intermediates are ignored)
+docs/build/doctrees/
+docs/build/html/.doctrees/
+
+# runtime data (same as module_2/module_3)
+data/raw_html/
+data/*.jsonl
+data/*.tmp
+data/*.log
+data/*.pid
+data/checkpoint.json
+data/raw_entries.json
+llm_hosting/.venv/
+llm_hosting/models/
+llm_hosting/work*/
+llm_hosting/__pycache__/

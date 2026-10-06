@@ -1,0 +1,251 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Operational notes &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ee4d292d" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f46eefca"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Troubleshooting" href="troubleshooting.html" />
+    <link rel="prev" title="Architecture" href="architecture.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Operational notes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#busy-state-policy">Busy-state policy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#uniqueness-key">Uniqueness key</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#idempotency-strategy">Idempotency strategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-a-pull-fetches-and-how-politely">What a pull fetches, and how politely</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rows-added-by-pull-data">Rows added by Pull Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#secrets-and-configuration">Secrets and configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#protecting-the-real-data-from-the-tests">Protecting the real data from the tests</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Operational notes</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="operational-notes">
+<h1>Operational notes<a class="headerlink" href="#operational-notes" title="Link to this heading"></a></h1>
+<section id="busy-state-policy">
+<h2>Busy-state policy<a class="headerlink" href="#busy-state-policy" title="Link to this heading"></a></h2>
+<p>Only one pull may run at a time. The busy flag is
+<code class="docutils literal notranslate"><span class="pre">webapp.services.PullState</span></code>, one per application instance:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">try_start()</span></code> atomically flips <em>idle</em> to <em>running</em> under a lock. It
+returns <code class="docutils literal notranslate"><span class="pre">False</span></code> if a pull is already running.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">finish()</span></code> flips it back. The route calls it in a <code class="docutils literal notranslate"><span class="pre">finally</span></code> block, so a
+scrape or load that crashes can never leave the app stuck <em>busy</em>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">is_running</span></code> is what the page and the buttons check.</p></li>
+</ul>
+<p>While a pull is running:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 35.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Request</p></th>
+<th class="head"><p>Answer</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/pull-data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">{&quot;busy&quot;:</span> <span class="pre">true}</span></code>. Nothing is scraped or loaded.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/update-analysis</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">{&quot;busy&quot;:</span> <span class="pre">true}</span></code>. The page tells the user that new data is still
+being retrieved.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/analysis</span></code></p></td>
+<td><p>The page renders with the <strong>Pull Data</strong> button disabled.</p></td>
+</tr>
+</tbody>
+</table>
+<p>When no pull is running, <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/update-analysis</span></code> answers <code class="docutils literal notranslate"><span class="pre">200</span> <span class="pre">{&quot;ok&quot;:</span> <span class="pre">true}</span></code>
+and the page reloads. The page queries the database on every request, so
+there is no cache to invalidate.</p>
+<p>The flag is an in-memory object with no timer and no <code class="docutils literal notranslate"><span class="pre">sleep()</span></code>, so tests can
+set it directly (<code class="docutils literal notranslate"><span class="pre">app.pull_state.try_start()</span></code>) to check the busy path.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The flag belongs to one Python process. That is right for <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">src/run.py</span></code>
+and Flask’s development server. Under a server that starts several worker
+processes, each worker would have its own flag. In that case, replace it
+with a lock every worker can see, for example a PostgreSQL advisory lock.</p>
+</div>
+</section>
+<section id="uniqueness-key">
+<h2>Uniqueness key<a class="headerlink" href="#uniqueness-key" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">applicants.p_id</span></code> is the primary key and the only uniqueness rule. It is
+Grad Café’s own result id, the number at the end of each entry’s URL
+(<code class="docutils literal notranslate"><span class="pre">https://www.thegradcafe.com/result/1020461</span></code>). The site assigns it, so
+the same entry always gets the same key, whether it arrives from the Module 2
+bulk file, a Pull Data run, or a pull repeated by accident.</p>
+</section>
+<section id="idempotency-strategy">
+<h2>Idempotency strategy<a class="headerlink" href="#idempotency-strategy" title="Link to this heading"></a></h2>
+<p>Loading the same data twice changes nothing:</p>
+<ol class="arabic simple">
+<li><p>Inside one batch, the first record with a given <code class="docutils literal notranslate"><span class="pre">p_id</span></code> wins, and later
+copies are dropped before anything reaches the database.</p></li>
+<li><p>The batch is copied (<code class="docutils literal notranslate"><span class="pre">COPY</span></code>) into a temporary staging table, then inserted
+with <code class="docutils literal notranslate"><span class="pre">INSERT</span> <span class="pre">…</span> <span class="pre">ON</span> <span class="pre">CONFLICT</span> <span class="pre">(p_id)</span> <span class="pre">DO</span> <span class="pre">NOTHING</span></code>. Rows that are already
+stored are skipped, and <strong>existing rows are never updated</strong>.</p></li>
+<li><p>The load is a single transaction. If any row fails (for example, an id too
+large for <code class="docutils literal notranslate"><span class="pre">INTEGER</span></code>), the whole batch is rolled back, Pull Data answers
+500, and no partial rows remain.</p></li>
+<li><p>Pull Data also avoids re-fetching. <code class="docutils literal notranslate"><span class="pre">scrape_new_entries</span></code> receives the
+stored ids, walks the listing newest-first, and stops at the first page that
+contains one of them.</p></li>
+</ol>
+<p>The tests pin each point down: a repeated pull inserts 0 rows, an overlapping
+pull inserts only the new row, and a failed load leaves the table empty
+(<code class="docutils literal notranslate"><span class="pre">tests/test_db_insert.py</span></code>, <code class="docutils literal notranslate"><span class="pre">tests/test_integration_end_to_end.py</span></code>).</p>
+</section>
+<section id="what-a-pull-fetches-and-how-politely">
+<h2>What a pull fetches, and how politely<a class="headerlink" href="#what-a-pull-fetches-and-how-politely" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>At most <strong>50 pages</strong> (about 1,000 entries) per click, newest first.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">robots.txt</span></code> is fetched and checked at the start of every pull. Two
+independent evaluations must both allow the listing: Python’s
+<code class="docutils literal notranslate"><span class="pre">urllib.robotparser</span></code> and an RFC 9309 longest-match check.</p></li>
+<li><p><strong>2 seconds</strong> between pages, or longer if <code class="docutils literal notranslate"><span class="pre">robots.txt</span></code> asks for a larger
+<code class="docutils literal notranslate"><span class="pre">Crawl-delay</span></code>. Every request has a 45-second timeout.</p></li>
+<li><p>A 401, 403 or 429, or a Cloudflare challenge page, <strong>stops the pull at once</strong>
+and is never retried or worked around. A plain 5xx is retried once after
+30 seconds. A timeout or connection error is retried after 30 and then
+120 seconds.</p></li>
+<li><p>The request only ever goes to <code class="docutils literal notranslate"><span class="pre">www.thegradcafe.com</span></code>, and only to the
+listing, <code class="docutils literal notranslate"><span class="pre">robots.txt</span></code> and result pages. Every URL, including a “Next” link
+read from a page, is rebuilt from validated parts first.</p></li>
+</ul>
+<p>A pull runs inside the HTTP request, so the browser waits for it: a few
+seconds for a handful of new entries, and a few minutes for the full 50 pages.</p>
+</section>
+<section id="rows-added-by-pull-data">
+<h2>Rows added by Pull Data<a class="headerlink" href="#rows-added-by-pull-data" title="Link to this heading"></a></h2>
+<p>Pull Data cleans the new entries but does not run the Module 2 LLM
+standardizer, which needs its own environment (<code class="docutils literal notranslate"><span class="pre">llm_hosting/</span></code>) and a local
+model. New rows therefore have <code class="docutils literal notranslate"><span class="pre">NULL</span></code> in <code class="docutils literal notranslate"><span class="pre">llm_generated_program</span></code> and
+<code class="docutils literal notranslate"><span class="pre">llm_generated_university</span></code>. Question 11 and the LLM-field count of Question 9
+are the only results that use those columns. They leave such rows out until
+the standardizer has been run over them. Question 9’s original-field count
+does include them.</p>
+</section>
+<section id="secrets-and-configuration">
+<h2>Secrets and configuration<a class="headerlink" href="#secrets-and-configuration" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>No password, token or connection string is committed. The database password
+comes from <code class="docutils literal notranslate"><span class="pre">~/.pgpass</span></code> or <code class="docutils literal notranslate"><span class="pre">PGPASSWORD</span></code> and is read by libpq.
+<code class="docutils literal notranslate"><span class="pre">FLASK_SECRET_KEY</span></code> is optional; without it, each process gets a random key.</p></li>
+<li><p>Error messages about the database show <code class="docutils literal notranslate"><span class="pre">user&#64;host:port/dbname</span></code> and never
+the password or the raw <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code>.</p></li>
+<li><p>The CI database uses <code class="docutils literal notranslate"><span class="pre">trust</span></code> authentication inside the throwaway GitHub
+Actions container, so the workflow file contains no password either.</p></li>
+</ul>
+</section>
+<section id="protecting-the-real-data-from-the-tests">
+<h2>Protecting the real data from the tests<a class="headerlink" href="#protecting-the-real-data-from-the-tests" title="Link to this heading"></a></h2>
+<p>The database tests empty the <code class="docutils literal notranslate"><span class="pre">applicants</span></code> table before each test. The
+<code class="docutils literal notranslate"><span class="pre">database_url</span></code> fixture therefore refuses to run unless the database name
+ends in <code class="docutils literal notranslate"><span class="pre">_test</span></code>. A missing or mistyped <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> makes those tests
+<em>error</em> rather than wipe <code class="docutils literal notranslate"><span class="pre">gradcafe</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="architecture.html" class="btn btn-neutral float-left" title="Architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="troubleshooting.html" class="btn btn-neutral float-right" title="Troubleshooting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

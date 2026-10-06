@@ -1,0 +1,379 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web layer &mdash; Grad Café Analytics</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ee4d292d" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f46eefca"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ETL layer" href="etl.html" />
+    <link rel="prev" title="API reference" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Grad Café Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using the service</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview and setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operations.html">Operational notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developing</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../testing.html">Testing guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Web layer</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#http-endpoints">HTTP endpoints</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-webapp">Application factory</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.create_app"><code class="docutils literal notranslate"><span class="pre">create_app()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-webapp.routes">Routes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.routes.root"><code class="docutils literal notranslate"><span class="pre">root()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.routes.index"><code class="docutils literal notranslate"><span class="pre">index()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.routes.pull_data"><code class="docutils literal notranslate"><span class="pre">pull_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.routes.update_analysis"><code class="docutils literal notranslate"><span class="pre">update_analysis()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.routes.api_applicants"><code class="docutils literal notranslate"><span class="pre">api_applicants()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-webapp.services">Services and the busy flag</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.services.PullState"><code class="docutils literal notranslate"><span class="pre">PullState</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.services.default_scrape_fn"><code class="docutils literal notranslate"><span class="pre">default_scrape_fn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.services.default_load_fn"><code class="docutils literal notranslate"><span class="pre">default_load_fn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#webapp.services.default_search_fn"><code class="docutils literal notranslate"><span class="pre">default_search_fn()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-run">Start-up script</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="etl.html">ETL layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="database.html">Database and analysis layer</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Grad Café Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API reference</a></li>
+      <li class="breadcrumb-item active">Web layer</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="web-layer">
+<h1>Web layer<a class="headerlink" href="#web-layer" title="Link to this heading"></a></h1>
+<section id="http-endpoints">
+<h2>HTTP endpoints<a class="headerlink" href="#http-endpoints" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 75.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Request</p></th>
+<th class="head"><p>Response</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">302</span></code> redirect to <code class="docutils literal notranslate"><span class="pre">/analysis</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/analysis</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">200</span></code> HTML page with every analysis result. If the database cannot be
+read, still <code class="docutils literal notranslate"><span class="pre">200</span></code>, with an error banner (<code class="docutils literal notranslate"><span class="pre">role=&quot;alert&quot;</span></code>) in place of
+the results.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/pull-data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">200</span> <span class="pre">{&quot;ok&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;inserted&quot;:</span> <span class="pre">N}</span></code> after scraping and loading;
+<code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">{&quot;busy&quot;:</span> <span class="pre">true}</span></code> while another pull runs (nothing is done);
+<code class="docutils literal notranslate"><span class="pre">500</span> <span class="pre">{&quot;ok&quot;:</span> <span class="pre">false,</span> <span class="pre">&quot;error&quot;:</span> <span class="pre">&quot;...&quot;}</span></code> if scraping or loading fails (the
+load is rolled back).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/update-analysis</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">200</span> <span class="pre">{&quot;ok&quot;:</span> <span class="pre">true}</span></code>; <code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">{&quot;busy&quot;:</span> <span class="pre">true}</span></code> while a pull runs.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-webapp">
+<span id="application-factory"></span><h2>Application factory<a class="headerlink" href="#module-webapp" title="Link to this heading"></a></h2>
+<p>webapp - Flask front end for the Grad Café analysis (Module 5).</p>
+<p>create_app() is the application factory.  Every external dependency the
+routes need — the scraper, the loader, the analysis query — is injected as a
+keyword argument with a production default, so tests can call:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>create_app(scrape_fn=fake_scrape, load_fn=fake_load, query_fn=fake_query)
+</pre></div>
+</div>
+<p>and get a fully working Flask app wired to fakes, with no real network call
+and no real database required unless a test wants one.  Importing this
+package imports orm_queries (and so models), which builds the SQLAlchemy
+engine but never opens a connection.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.create_app">
+<span class="sig-prename descclassname"><span class="pre">webapp.</span></span><span class="sig-name descname"><span class="pre">create_app</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scrape_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">load_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp.html#create_app"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.create_app" title="Link to this definition"></a></dt>
+<dd><p>Build and configure the Flask application.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>scrape_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>list</em><em>[</em><em>dict</em><em>]</em><em>] </em><em>| </em><em>None</em>) – no-argument callable returning newly scraped raw entries.
+Defaults to services.default_scrape_fn (talks to Grad Café).</p></li>
+<li><p><strong>load_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>list</em><em>[</em><em>dict</em><em>]</em><em>]</em><em>, </em><em>int</em><em>] </em><em>| </em><em>None</em>) – callable(raw_entries) -&gt; rows inserted.  Defaults to
+services.default_load_fn (cleans, then writes to PostgreSQL).</p></li>
+<li><p><strong>query_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>dict</em><em>] </em><em>| </em><em>None</em>) – no-argument callable returning the dict the analysis page
+renders.  Defaults to orm_queries.get_analysis (reads PostgreSQL
+through the SQLAlchemy model).</p></li>
+<li><p><strong>search_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>SearchRequest</em><em>]</em><em>, </em><em>list</em><em>[</em><em>dict</em><em>]</em><em>] </em><em>| </em><em>None</em>) – callable(SearchRequest) -&gt; rows for GET /api/applicants.
+Defaults to services.default_search_fn (a read-only, parameterized
+query; see applicant_search.py).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Flask</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-webapp.routes">
+<span id="routes"></span><h2>Routes<a class="headerlink" href="#module-webapp.routes" title="Link to this heading"></a></h2>
+<p>routes.py - The analysis page and its two buttons.</p>
+<p>Endpoints:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>GET  /                 redirect to /analysis
+GET  /analysis         analysis page (reads the database through QUERY_FN on every request)
+POST /pull-data        run SCRAPE_FN then LOAD_FN; 409 if a pull is already running
+POST /update-analysis  no-op that just confirms the page can be refreshed; 409 if busy
+GET  /api/applicants   filtered, sorted, LIMITed rows as JSON (see applicant_search.py)
+</pre></div>
+</div>
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.routes.root">
+<span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#root"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.root" title="Link to this definition"></a></dt>
+<dd><p>Convenience redirect; the analysis page itself lives at /analysis.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.routes.index">
+<span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">index</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.index" title="Link to this definition"></a></dt>
+<dd><p>Render every analysis result the injected QUERY_FN returns.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.routes.pull_data">
+<span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">pull_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#pull_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.pull_data" title="Link to this definition"></a></dt>
+<dd><p>Fetch new entries and load them; refuses to start a second pull while one runs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.routes.update_analysis">
+<span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">update_analysis</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#update_analysis"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.update_analysis" title="Link to this definition"></a></dt>
+<dd><p>Confirms the page can be refreshed; performs no database work and never gates on itself.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.routes.api_applicants">
+<span class="sig-prename descclassname"><span class="pre">webapp.routes.</span></span><span class="sig-name descname"><span class="pre">api_applicants</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/routes.html#api_applicants"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.routes.api_applicants" title="Link to this definition"></a></dt>
+<dd><p>Search stored applicants: ?term=&amp;status=&amp;degree=&amp;us_or_international=&amp;program=
+&amp;sort=&amp;order=&amp;limit= .  Invalid parameters get 400; at most MAX_LIMIT rows come back.</p>
+</dd></dl>
+
+</section>
+<section id="module-webapp.services">
+<span id="services-and-the-busy-flag"></span><h2>Services and the busy flag<a class="headerlink" href="#module-webapp.services" title="Link to this heading"></a></h2>
+<p>services.py - The work behind the two buttons, kept out of routes.py on purpose.</p>
+<p>Module 3’s Pull Data ran as a detached subprocess coordinated through a file
+lock and a status file on disk, because a full scrape could take ~90 minutes
+and the whole point was to survive a server restart.  That design is very
+hard to unit test: a real test would have to start a real subprocess, poll a
+real file, and wait — exactly the kind of slow, flaky, sleep()-based test the
+assignment forbids.</p>
+<p>The web app’s “Pull Data” is scoped narrower (only entries newer than what is
+already stored, via GradCafeScraper.scrape_new_entries), which finishes in
+seconds to at most a couple of minutes.  That lets the whole pipeline run
+in-process, inside the request, which makes it trivially testable: a test
+just swaps SCRAPE_FN and LOAD_FN for fakes and calls the route directly.</p>
+<p>PullState.is_running is the “busy” flag both buttons check.  It is a plain
+boolean guarded by a lock – not a sleep(), not a poll loop – so tests can
+set it directly to force the busy path (see tests/test_buttons.py).</p>
+<p>default_search_fn serves GET /api/applicants: the one path where user input
+reaches SQL (see applicant_search.py for the injection defences).</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="webapp.services.PullState">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">PullState</span></span><a class="reference internal" href="../_modules/webapp/services.html#PullState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.PullState" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Tracks whether a pull is currently in progress, for one Flask process.</p>
+<dl class="field-list simple">
+</dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="webapp.services.PullState.is_running">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_running</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#webapp.services.PullState.is_running" title="Link to this definition"></a></dt>
+<dd><p>True while a pull is in progress.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="webapp.services.PullState.try_start">
+<span class="sig-name descname"><span class="pre">try_start</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#PullState.try_start"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.PullState.try_start" title="Link to this definition"></a></dt>
+<dd><p>Atomically flip idle -&gt; running. Returns False if a pull is already running.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="webapp.services.PullState.finish">
+<span class="sig-name descname"><span class="pre">finish</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#PullState.finish"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.PullState.finish" title="Link to this definition"></a></dt>
+<dd><p>Always called from a finally: block, so a crash never leaves the app stuck busy.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.services.default_scrape_fn">
+<span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">default_scrape_fn</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#default_scrape_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.default_scrape_fn" title="Link to this definition"></a></dt>
+<dd><p>Production scraper: entries newer than what PostgreSQL already has.</p>
+<p>Importing this module never requires network access or a live database;
+both are touched only when this function runs.  GradCafeScraper is looked
+up on the scrape module at call time, so a test can monkeypatch it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.services.default_load_fn">
+<span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">default_load_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_entries</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#default_load_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.default_load_fn" title="Link to this definition"></a></dt>
+<dd><p>Production loader: clean the raw entries, then insert them.</p>
+<p>Standardizing program/university names with the local LLM is a separate,
+optional, much slower step (see module_5/llm_hosting); new rows land with
+llm_generated_program/llm_generated_university left NULL until that step
+is run, the same way any other not-yet-standardized row would.</p>
+<p>It never creates or alters tables: that is an administrator’s job
+(<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">src/load_data.py</span></code> as the table owner), so the web app can run
+as a least-privilege database user with only SELECT and INSERT.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>raw_entries</strong> (<em>list</em><em>[</em><em>dict</em><em>]</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="webapp.services.default_search_fn">
+<span class="sig-prename descclassname"><span class="pre">webapp.services.</span></span><span class="sig-name descname"><span class="pre">default_search_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/webapp/services.html#default_search_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#webapp.services.default_search_fn" title="Link to this definition"></a></dt>
+<dd><p>Production search for GET /api/applicants, in a read-only transaction.</p>
+<p>read_only=True makes PostgreSQL itself refuse any write in this session,
+a second line of defence behind the parameterized query.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>request</strong> (<em>SearchRequest</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-run">
+<span id="start-up-script"></span><h2>Start-up script<a class="headerlink" href="#module-run" title="Link to this heading"></a></h2>
+<p>run.py - Start the Grad Café analysis web page.</p>
+<p>Usage:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python run.py            # serves the page on port 8080 of this machine
+</pre></div>
+</div>
+<p>FLASK_HOST / PORT change the address.  Debug mode stays off; set
+FLASK_DEBUG=1 only on a development machine.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="API reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="etl.html" class="btn btn-neutral float-right" title="ETL layer" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Mike Sasso.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
