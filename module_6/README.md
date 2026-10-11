@@ -6,6 +6,7 @@
 
 | | |
 | --- | --- |
+| Report | [`module_6_report.pdf`](module_6_report.pdf): architecture, message flow, database initialization, worker behavior, verification with screenshots of the site and RabbitMQ ([`screenshots/`](screenshots/)) |
 | Run it | `cp .env.example .env`, replace every `change-me`, then `docker compose up --build` in `module_6/` (section 2) |
 | Web page | http://localhost:8080 |
 | RabbitMQ management UI | http://localhost:15672, log in with `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` from `.env` |
@@ -13,7 +14,7 @@
 | Continuous integration | [`.github/workflows/module_6.yml`](../.github/workflows/module_6.yml): Pylint, Pytest, Docker build (section 8) |
 | Pylint 10.00/10 | `cd module_6 && pylint src` (default settings, no `.pylintrc`) |
 | Tests | 528 tests, 100% coverage of `module_6/src` (section 7) |
-| Repository (SSH) | `git@github.com:sassom2112/jhu_software_concepts.git` (also in `github.txt`) |
+| Repository | https://github.com/sassom2112/jhu_software_concepts/tree/master/module_6 (SSH: `git@github.com:sassom2112/jhu_software_concepts.git`, also in `github.txt`) |
 
 Module 6 turns the Module 5 Grad Café application into a small microservice stack. The Flask page no
 longer scrapes or recomputes anything inside a request. Its two buttons publish a task to RabbitMQ and
@@ -80,7 +81,7 @@ the stored analysis has a new `computed_at`.
 ### Start it
 
 ```bash
-git clone git@github.com:sassom2112/jhu_software_concepts.git
+git clone https://github.com/sassom2112/jhu_software_concepts.git   # or git@github.com:sassom2112/jhu_software_concepts.git
 cd jhu_software_concepts/module_6
 cp .env.example .env
 # Edit .env and replace every change-me.  Passwords go into connection URLs, so use only
@@ -381,6 +382,9 @@ Module 6 or block it.
 ```
 module_6/
 ├── README.md                 # this file
+├── module_6_report.pdf       # the written report
+├── screenshots/              # the running site, RabbitMQ, the worker log, Docker Hub
+├── coverage_summary.txt      # terminal output of the full test run (528 passed, 100%)
 ├── docker-compose.yml        # db, rabbitmq, init, web, worker; volumes pgdata and rabbitmq_data
 ├── .env.example              # every setting, placeholder values only (copy to .env)
 ├── setup.py, requirements.txt, pytest.ini, .python-version

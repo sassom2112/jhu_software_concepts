@@ -12,3 +12,9 @@ Coursework for JHU EN.605.256 Modern Software Concepts in Python.
 
 * Code, tests and README: [`module_5/`](module_5/README.md)
 * CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs four jobs (Pylint 10/10, the pydeps dependency graph, Snyk, and the test suite with 100% coverage) on every push that changes `module_5/`
+
+## Module 6 - Deploy Anywhere
+
+* Code, tests and README: [`module_6/`](module_6/README.md); report with screenshots: [`module_6/module_6_report.pdf`](module_6/module_6_report.pdf)
+* Docker Hub (public): https://hub.docker.com/r/frametotoro/module_6 (tags `web-v1` and `worker-v1`)
+* CI: [`.github/workflows/module_6.yml`](.github/workflows/module_6.yml) runs three jobs (Pylint 10/10, the test suite with 100% coverage, and a Docker build of both images) on every push that changes `module_6/`

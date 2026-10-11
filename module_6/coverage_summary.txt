@@ -1,0 +1,48 @@
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+........................................................................ [ 40%]
+........................................................................ [ 54%]
+........................................................................ [ 68%]
+........................................................................ [ 81%]
+........................................................................ [ 95%]
+........................                                                 [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.13-final-0 _______________
+
+Name                                             Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------------
+module_6/src/db/__init__.py                          0      0   100%
+module_6/src/db/db_config.py                        56      0   100%
+module_6/src/db/db_roles.py                        116      0   100%
+module_6/src/db/jsonio.py                           26      0   100%
+module_6/src/db/load_data.py                       168      0   100%
+module_6/src/db/query_limits.py                     18      0   100%
+module_6/src/db/snapshot.py                         33      0   100%
+module_6/src/web/__init__.py                         0      0   100%
+module_6/src/web/app/__init__.py                    24      0   100%
+module_6/src/web/app/applicant_search.py            68      0   100%
+module_6/src/web/app/routes.py                      67      0   100%
+module_6/src/web/app/services.py                    17      0   100%
+module_6/src/web/publisher.py                       43      0   100%
+module_6/src/web/run.py                              5      0   100%
+module_6/src/worker/__init__.py                      0      0   100%
+module_6/src/worker/bootstrap.py                    61      0   100%
+module_6/src/worker/consumer.py                    201      0   100%
+module_6/src/worker/etl/__init__.py                  0      0   100%
+module_6/src/worker/etl/analysis_common.py          61      0   100%
+module_6/src/worker/etl/analytics.py                17      0   100%
+module_6/src/worker/etl/build_query_results.py      56      0   100%
+module_6/src/worker/etl/clean.py                   188      0   100%
+module_6/src/worker/etl/incremental_scraper.py      37      0   100%
+module_6/src/worker/etl/ingest.py                   10      0   100%
+module_6/src/worker/etl/models.py                   44      0   100%
+module_6/src/worker/etl/orm_queries.py             168      0   100%
+module_6/src/worker/etl/query_data.py              101      0   100%
+module_6/src/worker/etl/robots_rules.py             71      0   100%
+module_6/src/worker/etl/scrape.py                  494      0   100%
+module_6/src/worker/etl/scrape_state.py             37      0   100%
+module_6/src/worker/etl/site_urls.py                56      0   100%
+------------------------------------------------------------------------------
+TOTAL                                             2243      0   100%
+Required test coverage of 100% reached. Total coverage: 100.00%
+528 passed in 8.73s
