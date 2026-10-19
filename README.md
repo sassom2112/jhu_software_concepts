@@ -18,3 +18,8 @@ Coursework for JHU EN.605.256 Modern Software Concepts in Python.
 * Code, tests and README: [`module_6/`](module_6/README.md); report with screenshots: [`module_6/module_6_report.pdf`](module_6/module_6_report.pdf)
 * Docker Hub (public): https://hub.docker.com/r/frametotoro/module_6 (tags `web-v1` and `worker-v1`)
 * CI: [`.github/workflows/module_6.yml`](.github/workflows/module_6.yml) runs three jobs (Pylint 10/10, the test suite with 100% coverage, and a Docker build of both images) on every push that changes `module_6/`
+
+## Module 7 - Cloud Computing
+
+* Code, notebook and README: [`module_7/`](module_7/README.md): the SageMaker notebook `grad-cafe-pipeline.ipynb` downloads the Grad Café data from S3 with boto3 (`s3_fetch.py`) and saves it as `applicant_data_SM.json`
+* EC2 deployment of the Module 6 stack: [`module_7/ec2/EC2_DEPLOYMENT.md`](module_7/ec2/EC2_DEPLOYMENT.md) and [`module_7/ec2/docker-compose.ec2.yml`](module_7/ec2/docker-compose.ec2.yml)

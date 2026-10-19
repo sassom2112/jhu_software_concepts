@@ -16,6 +16,8 @@ htmlcov/
 
 # virtual environments and Python caches
 .venv/
+venv/
+env/
 __pycache__/
 *.pyc
 
@@ -43,3 +45,21 @@ __pycache__/
 /module_6/data/*.pid
 /module_6/data/checkpoint.json
 /module_6/data/raw_entries.json
+
+# --------------------------------------------------------------------------------------
+# Module 7.  Downloads and keys that must never be committed (.env is ignored above).
+# --------------------------------------------------------------------------------------
+
+# the notebook's output (36 MB), its temporary .part file, and a local copy of the S3 object
+/module_7/applicant_data_SM.json
+/module_7/applicant_data_SM.json.part
+/module_7/applicant_data.json
+# Jupyter's autosave folder
+.ipynb_checkpoints/
+# EC2 key pairs and the CSV files the IAM console downloads (access keys, passwords)
+*.pem
+*.ppk
+*accessKeys.csv
+*credentials.csv
+# an EC2 deploy folder made inside the repository by mistake (EC2_DEPLOYMENT.md uses ~/gradcafe-ec2)
+/module_7/ec2/data/

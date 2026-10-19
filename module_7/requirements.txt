@@ -1,0 +1,74 @@
+# Module 7 packages, every version pinned exactly.  This is the complete list: it also
+# installs with `pip install --no-deps -r requirements.txt`, and `pip check` then passes.
+# Python 3.10 or newer (SageMaker's conda_python3 kernel is Python 3.10; this was
+# developed with 3.11).  Lines with a python_version marker differ between 3.10 and
+# 3.11+: ipython and platformdirs dropped 3.10, and the other marked lines are
+# dependencies that only one side needs.
+#
+# On a SageMaker notebook instance nothing needs installing: the conda_python3 kernel
+# already has boto3, the only package the notebook and s3_fetch.py import.
+
+# --- The notebook and s3_fetch.py: boto3 and what it is built on ----------------------
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+python-dateutil==2.9.0.post0
+six==1.17.0
+urllib3==2.8.0
+
+# --- Lint: pylint for the .py files, nbqa to run pylint on the notebook ---------------
+pylint==4.1.3
+astroid==4.3.4
+dill==0.4.1
+isort==9.0.2
+mypy_extensions==1.1.0
+mccabe==0.7.0
+platformdirs==4.13.4; python_version >= "3.11"
+platformdirs==4.12.4; python_version < "3.11"
+tomli==2.5.0
+tomlkit==0.15.2
+typing_extensions==4.16.0
+nbqa==1.9.1
+autopep8==2.3.2
+pycodestyle==2.15.0
+tokenize_rt==6.2.0
+ipython==9.17.1; python_version >= "3.11"
+ipython==8.39.0; python_version < "3.11"
+ipython_pygments_lexers==1.1.1; python_version >= "3.11"
+psutil==7.2.2; python_version >= "3.11"
+decorator==5.3.1; python_version < "3.11"
+asttokens==3.0.2
+executing==2.3.0
+jedi==0.20.1
+parso==0.8.7
+matplotlib-inline==0.2.2
+pexpect==4.9.0
+ptyprocess==0.7.0
+prompt_toolkit==3.0.53
+wcwidth==0.9.2
+pure_eval==0.2.4
+stack-data==0.6.3
+traitlets==5.16.1
+Pygments==2.21.0
+
+# --- Tests (offline): pytest, and moto's fake S3 so no test talks to AWS --------------
+pytest==9.1.1
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.7.0
+exceptiongroup==1.3.1; python_version < "3.11"
+moto==5.2.4
+PyYAML==6.0.3
+py-partiql-parser==0.6.3
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.11
+requests==2.34.2
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+responses==0.26.3
+Werkzeug==3.1.9
+MarkupSafe==3.0.4
+xmltodict==1.0.4
